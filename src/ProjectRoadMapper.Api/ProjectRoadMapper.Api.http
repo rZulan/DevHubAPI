@@ -1,0 +1,44 @@
+@ProjectRoadMapper_HostAddress = http://localhost:5288
+@AccessToken = replace-with-the-token-returned-by-register-or-login
+@RefreshToken = replace-with-the-refresh-token-returned-by-register-or-login
+
+POST {{ProjectRoadMapper_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "firstName": "Example",
+  "lastName": "User",
+  "password": "ChangeMe123!"
+}
+
+###
+
+POST {{ProjectRoadMapper_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "ChangeMe123!"
+}
+
+###
+
+POST {{ProjectRoadMapper_HostAddress}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{RefreshToken}}"
+}
+
+###
+
+GET {{ProjectRoadMapper_HostAddress}}/api/users/me
+Authorization: Bearer {{AccessToken}}
+Accept: application/json
+
+###
+
+POST {{ProjectRoadMapper_HostAddress}}/api/auth/logout
+
+###
