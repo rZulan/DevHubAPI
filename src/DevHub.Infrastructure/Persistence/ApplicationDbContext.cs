@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Domain.Authentication;
 using DevHub.Domain.Users;
+using DevHub.Domain.Organizations;
+using DevHub.Domain.Teams;
 
 namespace DevHub.Infrastructure.Persistence;
 
@@ -12,7 +14,13 @@ public sealed class ApplicationDbContext(
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
+    public DbSet<ExternalAccount> ExternalAccounts => Set<ExternalAccount>();
+
     public DbSet<User> Users => Set<User>();
+
+    public DbSet<Organization> Organizations => Set<Organization>();
+
+    public DbSet<Team> Teams => Set<Team>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)

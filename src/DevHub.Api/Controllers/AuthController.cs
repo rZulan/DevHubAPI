@@ -5,10 +5,16 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Extensions.Options;
 using DevHub.Application.Authentication;
 using DevHub.Application.Authentication.Commands.Login;
+using DevHub.Application.Authentication.Commands.Logout;
 using DevHub.Application.Authentication.Commands.RefreshAccessToken;
 using DevHub.Application.Authentication.Commands.RegisterUser;
+using DevHub.Application.Authentication.ExternalAuthentication;
+using DevHub.Infrastructure.Authentication;
 
 namespace DevHub.Api.Controllers;
 
@@ -17,7 +23,10 @@ namespace DevHub.Api.Controllers;
 /// </summary>
 [Tags("Authentication")]
 [Route("api/auth")]
-public sealed class AuthController(ISender sender) : ApiControllerBase
+public sealed class AuthController(
+    ISender sender,
+    IOptions<AuthenticationCookieOptions> cookieOptions,
+    IConfiguration configuration) : ApiControllerBase
 {
     /// <summary>
     /// Register
@@ -103,11 +112,15 @@ public sealed class AuthController(ISender sender) : ApiControllerBase
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Refresh(
-        [FromBody]
-        RefreshAccessTokenCommand command,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)]
+        RefreshAccessTokenCommand? command,
         CancellationToken cancellationToken)
     {
-        var result = await sender.Send(command, cancellationToken);
+        var refreshToken = Request.Cookies[cookieOptions.Value.RefreshCookieName]
+            ?? command?.RefreshToken;
+        var result = await sender.Send(
+            new RefreshAccessTokenCommand(refreshToken ?? string.Empty),
+            cancellationToken);
 
         if (!result.IsSuccess)
         {
@@ -133,10 +146,155 @@ public sealed class AuthController(ISender sender) : ApiControllerBase
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Logout()
+    public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
+        var userId = GetAuthenticatedUserId();
+
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        await sender.Send(
+            new LogoutCommand(
+                userId.Value,
+                Request.Cookies[cookieOptions.Value.RefreshCookieName]),
+            cancellationToken);
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        DeleteRefreshTokenCookie();
         return NoContent();
+    }
+
+    /// <summary>
+    /// Start external authentication with Google or GitHub.
+    /// </summary>
+    [HttpGet("external/{provider}")]
+    [AllowAnonymous]
+    public IActionResult External(
+        string provider,
+        [FromQuery] string intent = "login",
+        [FromQuery] string returnUrl = "/account/profile")
+    {
+        var scheme = GetProviderScheme(provider);
+
+        if (scheme is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "OAuth provider not supported",
+                Detail = "Supported providers are google and github."
+            });
+        }
+
+        if (!ProviderIsConfigured(provider))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                title: "OAuth provider not configured",
+                detail: $"The {provider.ToLowerInvariant()} OAuth credentials are not configured.");
+        }
+
+        if (intent is not ("login" or "register"))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid OAuth intent",
+                Detail = "Intent must be either login or register."
+            });
+        }
+
+        if (!IsAllowedReturnUrl(returnUrl))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid return URL",
+                Detail = "The requested return URL is not allowed."
+            });
+        }
+
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = Url.Action(nameof(ExternalCallback))
+        };
+        properties.Items[ExternalAuthenticationConstants.IntentItem] = intent;
+        properties.Items[ExternalAuthenticationConstants.ProviderItem] = provider.ToLowerInvariant();
+        properties.Items[ExternalAuthenticationConstants.ReturnUrlItem] = returnUrl;
+
+        return Challenge(properties, scheme);
+    }
+
+    /// <summary>
+    /// Complete external authentication after the provider callback.
+    /// </summary>
+    [HttpGet("external/callback")]
+    [AllowAnonymous]
+    [ApiExplorerSettings(IgnoreApi = true)]
+    public async Task<IActionResult> ExternalCallback(CancellationToken cancellationToken)
+    {
+        var externalResult = await HttpContext.AuthenticateAsync(
+            AuthenticationSchemes.ExternalCookie);
+        var returnUrl = GetAuthenticationItem(
+            externalResult.Properties,
+            ExternalAuthenticationConstants.ReturnUrlItem) ?? "/account/profile";
+
+        if (!externalResult.Succeeded || externalResult.Principal is null)
+        {
+            return RedirectToFrontend(returnUrl, "external_authentication_failed");
+        }
+
+        var provider = GetAuthenticationItem(
+            externalResult.Properties,
+            ExternalAuthenticationConstants.ProviderItem);
+        var identity = CreateExternalIdentity(provider, externalResult.Principal);
+
+        if (identity is null)
+        {
+            await HttpContext.SignOutAsync(AuthenticationSchemes.ExternalCookie);
+            return RedirectToFrontend(returnUrl, "verified_email_required");
+        }
+
+        var linkingUserIdValue = GetAuthenticationItem(
+            externalResult.Properties,
+            ExternalAuthenticationConstants.LinkingUserIdItem);
+
+        if (Guid.TryParse(linkingUserIdValue, out var linkingUserId))
+        {
+            var currentSession = await HttpContext.AuthenticateAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme);
+            var currentUserId = currentSession.Principal?.FindFirstValue(
+                ClaimTypes.NameIdentifier);
+
+            if (!currentSession.Succeeded ||
+                !Guid.TryParse(currentUserId, out var authenticatedUserId) ||
+                authenticatedUserId != linkingUserId)
+            {
+                await HttpContext.SignOutAsync(AuthenticationSchemes.ExternalCookie);
+                return RedirectToFrontend(returnUrl, "linking_session_expired");
+            }
+
+            var linkResult = await sender.Send(
+                new LinkExternalAccountCommand(linkingUserId, identity),
+                cancellationToken);
+            await HttpContext.SignOutAsync(AuthenticationSchemes.ExternalCookie);
+
+            return linkResult.IsSuccess
+                ? RedirectToFrontend(returnUrl)
+                : RedirectToFrontend(returnUrl, linkResult.Error!.Code);
+        }
+
+        var result = await sender.Send(new ExternalSignInCommand(identity), cancellationToken);
+        await HttpContext.SignOutAsync(AuthenticationSchemes.ExternalCookie);
+
+        if (!result.IsSuccess)
+        {
+            return RedirectToFrontend(returnUrl, result.Error!.Code);
+        }
+
+        await SignInWithCookieAsync(result.Value!);
+        return RedirectToFrontend(returnUrl);
     }
 
     private Task SignInWithCookieAsync(AuthenticationResponse response)
@@ -160,10 +318,151 @@ public sealed class AuthController(ISender sender) : ApiControllerBase
             ExpiresUtc = response.RefreshTokenExpiresAtUtc
         };
 
+        WriteRefreshTokenCookie(response);
+
         return HttpContext.SignInAsync(
             CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(identity),
             properties);
+    }
+
+    private void WriteRefreshTokenCookie(AuthenticationResponse response)
+    {
+        var settings = cookieOptions.Value;
+
+        Response.Cookies.Append(
+            settings.RefreshCookieName,
+            response.RefreshToken,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = settings.Secure,
+                SameSite = settings.GetSameSiteMode(),
+                Path = "/api/auth",
+                Expires = response.RefreshTokenExpiresAtUtc,
+                IsEssential = true
+            });
+    }
+
+    private void DeleteRefreshTokenCookie()
+    {
+        var settings = cookieOptions.Value;
+
+        Response.Cookies.Delete(
+            settings.RefreshCookieName,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = settings.Secure,
+                SameSite = settings.GetSameSiteMode(),
+                Path = "/api/auth"
+            });
+    }
+
+    private Guid? GetAuthenticatedUserId()
+    {
+        var subject = User.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+            ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        return Guid.TryParse(subject, out var userId) ? userId : null;
+    }
+
+    private string? GetProviderScheme(string provider) =>
+        provider.ToLowerInvariant() switch
+        {
+            "google" => AuthenticationSchemes.Google,
+            "github" => AuthenticationSchemes.GitHub,
+            _ => null
+        };
+
+    private bool ProviderIsConfigured(string provider)
+    {
+        var sectionName = provider.ToLowerInvariant() switch
+        {
+            "google" => "Google",
+            "github" => "GitHub",
+            _ => provider
+        };
+
+        return !string.IsNullOrWhiteSpace(
+                   configuration[$"Authentication:{sectionName}:ClientId"]) &&
+               !string.IsNullOrWhiteSpace(
+                   configuration[$"Authentication:{sectionName}:ClientSecret"]);
+    }
+
+    private bool IsAllowedReturnUrl(string returnUrl)
+    {
+        var allowedPaths = configuration
+            .GetSection("Frontend:AllowedReturnPaths")
+            .Get<string[]>() ?? ["/account/profile", "/account/account"];
+
+        return returnUrl.StartsWith("/", StringComparison.Ordinal) &&
+               !returnUrl.StartsWith("//", StringComparison.Ordinal) &&
+               allowedPaths.Contains(returnUrl, StringComparer.Ordinal);
+    }
+
+    private static string? GetAuthenticationItem(
+        AuthenticationProperties? properties,
+        string key) =>
+        properties is not null && properties.Items.TryGetValue(key, out var value)
+            ? value
+            : null;
+
+    private IActionResult RedirectToFrontend(string returnUrl, string? error = null)
+    {
+        if (!IsAllowedReturnUrl(returnUrl))
+        {
+            returnUrl = "/account/profile";
+        }
+
+        var frontendBaseUrl = configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
+        var destination = new Uri(new Uri(frontendBaseUrl), returnUrl).ToString();
+
+        if (!string.IsNullOrWhiteSpace(error))
+        {
+            destination = QueryHelpers.AddQueryString(destination, "oauthError", error);
+        }
+
+        return Redirect(destination);
+    }
+
+    private static ExternalIdentity? CreateExternalIdentity(
+        string? provider,
+        ClaimsPrincipal principal)
+    {
+        var providerUserId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = principal.FindFirstValue(ClaimTypes.Email);
+        var emailVerified = principal.FindFirstValue(
+            ExternalAuthenticationConstants.EmailVerifiedClaim);
+
+        if (string.IsNullOrWhiteSpace(provider) ||
+            string.IsNullOrWhiteSpace(providerUserId) ||
+            string.IsNullOrWhiteSpace(email) ||
+            !bool.TryParse(emailVerified, out var isVerified) ||
+            !isVerified)
+        {
+            return null;
+        }
+
+        var providerUsername = principal.FindFirstValue(
+            ExternalAuthenticationConstants.ProviderUsernameClaim);
+        var displayName = principal.FindFirstValue(ClaimTypes.Name)
+            ?? providerUsername
+            ?? email.Split('@', 2)[0];
+        var givenName = principal.FindFirstValue(ClaimTypes.GivenName);
+        var surname = principal.FindFirstValue(ClaimTypes.Surname);
+        var nameParts = displayName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        var firstName = givenName ?? nameParts.FirstOrDefault() ?? "DevHub";
+        var lastName = surname ?? (nameParts.Length > 1 ? nameParts[1] : "User");
+
+        return new ExternalIdentity(
+            provider,
+            providerUserId,
+            email,
+            providerUsername,
+            firstName,
+            lastName,
+            principal.FindFirstValue(ExternalAuthenticationConstants.AvatarUrlClaim));
     }
 
 }

@@ -21,11 +21,6 @@ internal sealed class GetUserByIdQueryHandler(IUserRepository userRepository)
                 ErrorType.NotFound));
         }
 
-        return Result<UserResponse>.Success(new UserResponse(
-            user.Id,
-            user.Email,
-            user.FirstName,
-            user.LastName,
-            user.CreatedAtUtc));
+        return Result<UserResponse>.Success(user.ToUserResponse());
     }
 }

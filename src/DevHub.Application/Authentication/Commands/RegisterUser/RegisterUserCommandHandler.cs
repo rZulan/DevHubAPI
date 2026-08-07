@@ -4,6 +4,7 @@ using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Domain.Authentication;
 using DevHub.Domain.Users;
+using DevHub.Application.Users;
 
 namespace DevHub.Application.Authentication.Commands.RegisterUser;
 
@@ -34,9 +35,36 @@ internal sealed class RegisterUserCommandHandler(
             return Result<AuthenticationResponse>.Failure(AuthenticationErrors.EmailAlreadyExists);
         }
 
+        if (request.Username is not null)
+        {
+            var usernameError = UsernamePolicy.GetValidationError(request.Username);
+
+            if (usernameError is not null)
+            {
+                return Result<AuthenticationResponse>.Failure(
+                    AuthenticationErrors.InvalidRegistration(
+                        new Dictionary<string, string[]>
+                        {
+                            [nameof(request.Username)] = [usernameError]
+                        }));
+            }
+
+            if (await userRepository.UsernameExistsAsync(
+                    request.Username,
+                    cancellationToken: cancellationToken))
+            {
+                return Result<AuthenticationResponse>.Failure(AuthenticationErrors.UsernameAlreadyExists);
+            }
+        }
+
+        var username = request.Username ?? await UsernamePolicy.CreateAvailableAsync(
+            request.Email.Split('@', 2)[0],
+            userRepository,
+            cancellationToken);
         var passwordHash = passwordHasher.Hash(request.Password);
         var user = User.Create(
             request.Email,
+            username,
             request.FirstName,
             request.LastName,
             passwordHash,
@@ -56,7 +84,7 @@ internal sealed class RegisterUserCommandHandler(
         }
         catch (UniqueConstraintViolationException)
         {
-            return Result<AuthenticationResponse>.Failure(AuthenticationErrors.EmailAlreadyExists);
+            return Result<AuthenticationResponse>.Failure(AuthenticationErrors.AccountAlreadyExists);
         }
 
         var accessToken = jwtTokenGenerator.Generate(user);

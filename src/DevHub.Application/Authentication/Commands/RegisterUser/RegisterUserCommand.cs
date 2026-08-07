@@ -15,12 +15,14 @@ public sealed record RegisterUserCommand : IRequest<Result<AuthenticationRespons
         string email,
         string firstName,
         string lastName,
-        string password)
+        string password,
+        string? username = null)
     {
         Email = email;
         FirstName = firstName;
         LastName = lastName;
         Password = password;
+        Username = username;
     }
 
     /// <summary>
@@ -58,4 +60,9 @@ public sealed record RegisterUserCommand : IRequest<Result<AuthenticationRespons
         MinimumLength = 8,
         ErrorMessage = "Password must be between 8 and 128 characters.")]
     public string Password { get; init; }
+
+    /// <summary>
+    /// Optional public username. If omitted, a unique username is generated from the email address.
+    /// </summary>
+    public string? Username { get; init; }
 }

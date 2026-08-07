@@ -27,7 +27,9 @@ internal sealed class LoginCommandHandler(
 
         var user = await userRepository.GetByEmailAsync(request.Email, cancellationToken);
 
-        if (user is null || !passwordHasher.Verify(user.PasswordHash, request.Password))
+        if (user is null ||
+            !user.HasPassword ||
+            !passwordHasher.Verify(user.PasswordHash!, request.Password))
         {
             return Result<AuthenticationResponse>.Failure(AuthenticationErrors.InvalidCredentials);
         }

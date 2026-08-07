@@ -1,12 +1,12 @@
 @DevHub_HostAddress = http://localhost:5288
 @AccessToken = replace-with-the-token-returned-by-register-or-login
-@RefreshToken = replace-with-the-refresh-token-returned-by-register-or-login
 
 POST {{DevHub_HostAddress}}/api/auth/register
 Content-Type: application/json
 
 {
   "email": "user@example.com",
+  "username": "example-user",
   "firstName": "Example",
   "lastName": "User",
   "password": "ChangeMe123!"
@@ -25,11 +25,6 @@ Content-Type: application/json
 ###
 
 POST {{DevHub_HostAddress}}/api/auth/refresh
-Content-Type: application/json
-
-{
-  "refreshToken": "{{RefreshToken}}"
-}
 
 ###
 

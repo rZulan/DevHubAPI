@@ -1,14 +1,10 @@
 using DevHub.Domain.Users;
-using DevHub.Application.Users;
 
-namespace DevHub.Application.Authentication;
+namespace DevHub.Application.Users;
 
-internal static class AuthenticationMappings
+internal static class UserMappings
 {
-    public static AuthenticationResponse ToAuthenticationResponse(
-        this User user,
-        TokenResult accessToken,
-        RefreshTokenValue refreshToken) =>
+    public static UserResponse ToUserResponse(this User user) =>
         new(
             user.Id,
             user.Email,
@@ -22,8 +18,5 @@ internal static class AuthenticationMappings
                     account.Provider,
                     account.ProviderUsername))
                 .ToArray(),
-            accessToken.AccessToken,
-            accessToken.ExpiresAtUtc,
-            refreshToken.Token,
-            refreshToken.ExpiresAtUtc);
+            user.CreatedAtUtc);
 }
