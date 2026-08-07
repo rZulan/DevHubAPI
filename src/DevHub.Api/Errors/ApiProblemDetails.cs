@@ -125,5 +125,5 @@ internal static class ApiProblemDetails
         };
 
     private static string CreateType(string errorCode) =>
-        $"urn:project-road-mapper:error:{errorCode.ToLowerInvariant()}";
+        $"urn:devhub:error:{errorCode.ToLowerInvariant()}";
 }

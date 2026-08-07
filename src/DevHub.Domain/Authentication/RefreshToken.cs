@@ -1,6 +1,8 @@
+using DevHub.Domain.Common;
+
 namespace DevHub.Domain.Authentication;
 
-public sealed class RefreshToken
+public sealed class RefreshToken : BaseEntity
 {
     private RefreshToken()
     {
@@ -13,24 +15,19 @@ public sealed class RefreshToken
         string tokenHash,
         DateTimeOffset createdAtUtc,
         DateTimeOffset expiresAtUtc)
+        : base(id, createdAtUtc)
     {
-        Id = id;
         UserId = userId;
         FamilyId = familyId;
         TokenHash = tokenHash;
-        CreatedAtUtc = createdAtUtc;
         ExpiresAtUtc = expiresAtUtc;
     }
-
-    public Guid Id { get; private set; }
 
     public Guid UserId { get; private set; }
 
     public Guid FamilyId { get; private set; }
 
     public string TokenHash { get; private set; } = string.Empty;
-
-    public DateTimeOffset CreatedAtUtc { get; private set; }
 
     public DateTimeOffset ExpiresAtUtc { get; private set; }
 
@@ -77,5 +74,6 @@ public sealed class RefreshToken
 
         RevokedAtUtc = revokedAtUtc;
         ReplacedByTokenId = replacementTokenId;
+        MarkUpdated(revokedAtUtc);
     }
 }
