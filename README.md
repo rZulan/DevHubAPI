@@ -101,6 +101,10 @@ the provider email matches. Sign in normally, then connect the provider from Acc
 settings. Allowed frontend origins and post-OAuth paths are explicitly configured under
 `Frontend` in `appsettings.json`; replace the local values for deployment.
 
+Usernames are unique without regard to letter casing and follow X-style handle syntax:
+5-15 ASCII letters, numbers, or underscores. The leading `@` is display-only and is not
+stored as part of the username; spaces, hyphens, and other symbols are not allowed.
+
 All organization and team endpoints require authentication. Creating an organization
 automatically adds the creator as a member. A user must belong to the organization before
 they can be added to one of its teams.

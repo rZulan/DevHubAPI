@@ -5,6 +5,10 @@ namespace DevHub.Application.Users;
 
 internal static partial class UsernamePolicy
 {
+    private const int MinimumLength = 5;
+    private const int MaximumLength = 15;
+    private const int UniqueSuffixLength = 6;
+
     private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
         "admin",
@@ -17,7 +21,7 @@ internal static partial class UsernamePolicy
     {
         if (string.IsNullOrWhiteSpace(username) || !ValidUsernameRegex().IsMatch(username))
         {
-            return "Username must be 3-30 characters and contain only lowercase letters, numbers, underscores, or hyphens.";
+            return "Username must be 5-15 characters and contain only letters, numbers, or underscores.";
         }
 
         return Reserved.Contains(username)
@@ -38,14 +42,21 @@ internal static partial class UsernamePolicy
             return candidate;
         }
 
-        var prefix = candidate.Length > 23 ? candidate[..23].TrimEnd('-', '_') : candidate;
+        var maximumPrefixLength = MaximumLength - UniqueSuffixLength - 1;
+        var prefix = candidate[..Math.Min(candidate.Length, maximumPrefixLength)].TrimEnd('_');
+
+        if (prefix.Length == 0)
+        {
+            prefix = "user";
+        }
 
         for (var attempt = 0; attempt < 10; attempt++)
         {
-            var suffix = Guid.NewGuid().ToString("N")[..6];
-            var uniqueCandidate = $"{prefix}-{suffix}";
+            var suffix = Guid.NewGuid().ToString("N")[..UniqueSuffixLength];
+            var uniqueCandidate = $"{prefix}_{suffix}";
 
-            if (!await userRepository.UsernameExistsAsync(
+            if (GetValidationError(uniqueCandidate) is null &&
+                !await userRepository.UsernameExistsAsync(
                     uniqueCandidate,
                     cancellationToken: cancellationToken))
             {
@@ -59,20 +70,25 @@ internal static partial class UsernamePolicy
     private static string Sanitize(string value)
     {
         var sanitized = InvalidUsernameCharactersRegex()
-            .Replace(value.Trim().ToLowerInvariant(), "-")
-            .Trim('-', '_');
+            .Replace(value.Trim().ToLowerInvariant(), "_")
+            .Trim('_');
 
-        if (sanitized.Length > 30)
+        if (sanitized.Length > MaximumLength)
         {
-            sanitized = sanitized[..30].TrimEnd('-', '_');
+            sanitized = sanitized[..MaximumLength].TrimEnd('_');
         }
 
-        return sanitized.Length >= 3 ? sanitized : $"user-{sanitized}".TrimEnd('-');
+        if (sanitized.Length >= MinimumLength)
+        {
+            return sanitized;
+        }
+
+        return $"user_{sanitized}"[..Math.Min(MaximumLength, sanitized.Length + 5)];
     }
 
-    [GeneratedRegex("^[a-z0-9_-]{3,30}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^[A-Za-z0-9_]{5,15}$", RegexOptions.CultureInvariant)]
     private static partial Regex ValidUsernameRegex();
 
-    [GeneratedRegex("[^a-z0-9_-]+", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("[^A-Za-z0-9_]+", RegexOptions.CultureInvariant)]
     private static partial Regex InvalidUsernameCharactersRegex();
 }
