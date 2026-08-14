@@ -55,11 +55,15 @@ dotnet ef database update `
   --startup-project src/DevHub.Api
 ```
 
-Run the API:
+Run or restart the API. This launcher stops an existing DevHub API process from this
+repository before starting the new instance. It refuses to stop unrelated applications
+that happen to use the same ports:
 
 ```powershell
-dotnet run --project src/DevHub.Api
+.\run-api.ps1
 ```
+
+Use `dotnet run --project src/DevHub.Api` when automatic restart behavior is not needed.
 
 In development, Scalar is available at `http://localhost:5288/scalar/v1`.
 
