@@ -148,8 +148,12 @@ public static class DependencyInjection
             .AddGoogle(AuthenticationSchemes.Google, options =>
             {
                 options.SignInScheme = AuthenticationSchemes.ExternalCookie;
-                options.ClientId = configuration["Authentication:Google:ClientId"] ?? "not-configured";
-                options.ClientSecret = configuration["Authentication:Google:ClientSecret"] ?? "not-configured";
+                options.ClientId = GetOAuthCredential(
+                    configuration,
+                    "Authentication:Google:ClientId");
+                options.ClientSecret = GetOAuthCredential(
+                    configuration,
+                    "Authentication:Google:ClientSecret");
                 options.CallbackPath = "/signin-google";
                 options.SaveTokens = false;
                 options.UsePkce = true;
@@ -168,8 +172,12 @@ public static class DependencyInjection
             .AddOAuth(AuthenticationSchemes.GitHub, options =>
             {
                 options.SignInScheme = AuthenticationSchemes.ExternalCookie;
-                options.ClientId = configuration["Authentication:GitHub:ClientId"] ?? "not-configured";
-                options.ClientSecret = configuration["Authentication:GitHub:ClientSecret"] ?? "not-configured";
+                options.ClientId = GetOAuthCredential(
+                    configuration,
+                    "Authentication:GitHub:ClientId");
+                options.ClientSecret = GetOAuthCredential(
+                    configuration,
+                    "Authentication:GitHub:ClientSecret");
                 options.CallbackPath = "/signin-github";
                 options.AuthorizationEndpoint = "https://github.com/login/oauth/authorize";
                 options.TokenEndpoint = "https://github.com/login/oauth/access_token";
@@ -189,6 +197,14 @@ public static class DependencyInjection
         services.AddAuthorization();
 
         return services;
+    }
+
+    private static string GetOAuthCredential(
+        IConfiguration configuration,
+        string key)
+    {
+        var value = configuration[key];
+        return string.IsNullOrWhiteSpace(value) ? "not-configured" : value;
     }
 
     private static async Task PopulateGitHubClaimsAsync(OAuthCreatingTicketContext context)
