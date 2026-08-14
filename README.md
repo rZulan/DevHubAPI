@@ -71,7 +71,7 @@ In development, Scalar is available at `http://localhost:5288/scalar/v1`.
 - `POST /api/auth/logout` - revokes the refresh-token family and clears session cookies.
 - `GET /api/auth/external/{google|github}` - starts external login or registration.
 - `GET /api/users/me` - requires an authentication cookie or bearer token.
-- `PATCH /api/users/me` - updates username and profile names.
+- `PATCH /api/users/me` - updates username, profile names, and date of birth.
 - `GET|DELETE /api/users/me/connections/{google|github}` - links or disconnects a provider.
 - `GET|POST /api/organizations` - lists memberships or creates an organization.
 - `GET|PUT|DELETE /api/organizations/{organizationId}` - organization CRUD.

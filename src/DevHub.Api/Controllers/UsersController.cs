@@ -78,7 +78,8 @@ public sealed class UsersController(
                 userId.Value,
                 request.Username,
                 request.FirstName,
-                request.LastName),
+                request.LastName,
+                request.DateOfBirth),
             cancellationToken);
 
         return result.IsSuccess
@@ -208,4 +209,5 @@ public sealed class UsersController(
 public sealed record UpdateCurrentUserRequest(
     string Username,
     string FirstName,
-    string LastName);
+    string LastName,
+    DateOnly? DateOfBirth);

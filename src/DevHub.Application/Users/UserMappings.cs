@@ -11,6 +11,7 @@ internal static class UserMappings
             user.Username,
             user.FirstName,
             user.LastName,
+            user.DateOfBirth,
             user.AvatarUrl,
             user.ExternalAccounts
                 .OrderBy(account => account.Provider)

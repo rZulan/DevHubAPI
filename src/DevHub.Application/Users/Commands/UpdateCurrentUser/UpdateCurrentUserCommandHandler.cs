@@ -35,6 +35,14 @@ internal sealed class UpdateCurrentUserCommandHandler(
                 ["Last name is required and must not exceed 100 characters."];
         }
 
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+
+        if (request.DateOfBirth > today)
+        {
+            validationErrors[nameof(request.DateOfBirth)] =
+                ["Date of birth cannot be in the future."];
+        }
+
         if (validationErrors.Count > 0)
         {
             return Result<UserResponse>.Failure(new Error(
@@ -66,6 +74,7 @@ internal sealed class UpdateCurrentUserCommandHandler(
             request.Username,
             request.FirstName,
             request.LastName,
+            request.DateOfBirth,
             timeProvider.GetUtcNow());
 
         try

@@ -15,6 +15,7 @@ internal static class AuthenticationMappings
             user.Username,
             user.FirstName,
             user.LastName,
+            user.DateOfBirth,
             user.AvatarUrl,
             user.ExternalAccounts
                 .OrderBy(account => account.Provider)

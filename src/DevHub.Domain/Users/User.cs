@@ -46,6 +46,8 @@ public sealed class User : BaseEntity
 
     public string LastName { get; private set; } = string.Empty;
 
+    public DateOnly? DateOfBirth { get; private set; }
+
     public string? PasswordHash { get; private set; }
 
     public string? AvatarUrl { get; private set; }
@@ -111,6 +113,7 @@ public sealed class User : BaseEntity
         string username,
         string firstName,
         string lastName,
+        DateOnly? dateOfBirth,
         DateTimeOffset updatedAtUtc)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(username);
@@ -121,6 +124,7 @@ public sealed class User : BaseEntity
         NormalizedUsername = NormalizeUsername(username);
         FirstName = firstName.Trim();
         LastName = lastName.Trim();
+        DateOfBirth = dateOfBirth;
         MarkUpdated(updatedAtUtc);
     }
 

@@ -42,6 +42,9 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(100)
             .IsRequired();
 
+        builder.Property(user => user.DateOfBirth)
+            .HasColumnType("date");
+
         builder.Property(user => user.PasswordHash)
             .HasMaxLength(512);
 

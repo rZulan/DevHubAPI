@@ -7,4 +7,5 @@ public sealed record UpdateCurrentUserCommand(
     Guid UserId,
     string Username,
     string FirstName,
-    string LastName) : IRequest<Result<UserResponse>>;
+    string LastName,
+    DateOnly? DateOfBirth) : IRequest<Result<UserResponse>>;
