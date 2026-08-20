@@ -85,6 +85,12 @@ In development, Scalar is available at `http://localhost:5288/scalar/v1`.
 - `GET|PUT|DELETE /api/organizations/{organizationId}/teams/{teamId}` - team CRUD.
 - `GET|PUT|DELETE /api/organizations/{organizationId}/teams/{teamId}/members/{userId?}` -
   lists, adds, or removes team members.
+- `GET|POST /api/organizations/{organizationId}/projects` - lists visible projects or
+  creates a project for a team.
+- `GET|PUT|DELETE /api/organizations/{organizationId}/projects/{projectId}` - project
+  details, updates, and deletion. Organization owners see every project; other members
+  only see projects owned by their teams. Owners and the owning team leader can manage
+  a project.
 
 Registration, login, external login, and token refresh issue an authentication cookie
 plus a separate rotating HTTP-only refresh-token cookie. Refresh tokens are no longer
@@ -110,5 +116,8 @@ Usernames are unique without regard to letter casing and follow X-style handle s
 stored as part of the username; spaces, hyphens, and other symbols are not allowed.
 
 All organization and team endpoints require authentication. Creating an organization
-automatically adds the creator as a member. A user must belong to the organization before
-they can be added to one of its teams.
+makes the creator its owner and first member. Only the organization owner can create or
+delete teams and assign team leadership. Each team has exactly one leader; the owner or
+that leader can manage team members. A user must belong to the organization before they
+can be added to one of its teams, and the active leader cannot be removed until leadership
+is reassigned.
