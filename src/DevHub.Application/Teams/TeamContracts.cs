@@ -8,6 +8,7 @@ namespace DevHub.Application.Teams;
 public sealed record TeamResponse(
     Guid Id,
     Guid OrganizationId,
+    Guid LeaderUserId,
     string Name,
     string? Description,
     DateTimeOffset CreatedAtUtc,
@@ -17,6 +18,7 @@ public sealed record TeamResponse(
 public sealed record CreateTeamCommand(
     Guid OrganizationId,
     Guid RequestingUserId,
+    Guid LeaderUserId,
     [property: Required, StringLength(150)] string Name,
     [property: StringLength(1000)] string? Description)
     : IRequest<Result<TeamResponse>>;
@@ -25,6 +27,7 @@ public sealed record UpdateTeamCommand(
     Guid OrganizationId,
     Guid TeamId,
     Guid RequestingUserId,
+    Guid LeaderUserId,
     [property: Required, StringLength(150)] string Name,
     [property: StringLength(1000)] string? Description)
     : IRequest<Result<TeamResponse>>;

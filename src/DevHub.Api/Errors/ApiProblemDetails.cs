@@ -104,6 +104,7 @@ internal static class ApiProblemDetails
             ErrorType.Validation => StatusCodes.Status400BadRequest,
             ErrorType.Conflict => StatusCodes.Status409Conflict,
             ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
+            ErrorType.Forbidden => StatusCodes.Status403Forbidden,
             ErrorType.NotFound => StatusCodes.Status404NotFound,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(errorType),
@@ -117,6 +118,7 @@ internal static class ApiProblemDetails
             ErrorType.Validation => "Validation failed",
             ErrorType.Conflict => "Conflict",
             ErrorType.Unauthorized => "Authentication failed",
+            ErrorType.Forbidden => "Permission denied",
             ErrorType.NotFound => "Resource not found",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(errorType),

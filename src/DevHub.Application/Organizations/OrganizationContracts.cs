@@ -7,6 +7,7 @@ namespace DevHub.Application.Organizations;
 
 public sealed record OrganizationResponse(
     Guid Id,
+    Guid OwnerUserId,
     string Name,
     string? Description,
     DateTimeOffset CreatedAtUtc,

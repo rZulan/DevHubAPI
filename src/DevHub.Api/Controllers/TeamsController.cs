@@ -8,8 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace DevHub.Api.Controllers;
 
 public sealed record SaveTeamRequest(
-    [property: Required, StringLength(150)] string Name,
-    [property: StringLength(1000)] string? Description);
+    [Required, StringLength(150)] string Name,
+    [StringLength(1000)] string? Description,
+    Guid LeaderUserId);
 
 /// <summary>Creates and manages teams within an organization.</summary>
 [Tags("Teams")]
@@ -47,6 +48,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     [EndpointName("CreateTeam")]
     [ProducesResponseType<TeamResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create(
@@ -56,7 +58,12 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(
-            new CreateTeamCommand(organizationId, userId, request.Name, request.Description),
+            new CreateTeamCommand(
+                organizationId,
+                userId,
+                request.LeaderUserId,
+                request.Name,
+                request.Description),
             cancellationToken);
         return result.IsSuccess
             ? CreatedAtAction(
@@ -70,6 +77,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     [EndpointName("UpdateTeam")]
     [ProducesResponseType<TeamResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(
@@ -84,6 +92,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
                 organizationId,
                 teamId,
                 userId,
+                request.LeaderUserId,
                 request.Name,
                 request.Description),
             cancellationToken);
@@ -93,6 +102,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     [HttpDelete("{teamId:guid}")]
     [EndpointName("DeleteTeam")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(
         Guid organizationId,
@@ -125,6 +135,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     [HttpPut("{teamId:guid}/members/{memberUserId:guid}")]
     [EndpointName("AddTeamMember")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> AddMember(
@@ -143,6 +154,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
     [HttpDelete("{teamId:guid}/members/{memberUserId:guid}")]
     [EndpointName("RemoveTeamMember")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveMember(
         Guid organizationId,

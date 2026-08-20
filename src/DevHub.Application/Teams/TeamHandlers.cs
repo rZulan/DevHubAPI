@@ -24,6 +24,21 @@ internal static class TeamErrors
         "A user must be an organization member before joining one of its teams.",
         ErrorType.Conflict);
 
+    public static readonly Error OwnerRequired = new(
+        "Teams.OwnerRequired",
+        "Only the organization owner can create, delete, or reassign leadership of a team.",
+        ErrorType.Forbidden);
+
+    public static readonly Error TeamManagementRequired = new(
+        "Teams.ManagementRequired",
+        "Only the organization owner or this team's leader can manage the team.",
+        ErrorType.Forbidden);
+
+    public static readonly Error LeaderCannotBeRemoved = new(
+        "Teams.LeaderCannotBeRemoved",
+        "The team leader cannot be removed. Assign a different leader first.",
+        ErrorType.Conflict);
+
     public static Error Invalid(IReadOnlyDictionary<string, string[]> errors) => new(
         "Teams.ValidationFailed",
         "One or more team fields are invalid.",
@@ -36,6 +51,7 @@ internal static class TeamMappings
     public static TeamResponse ToResponse(this Team team) => new(
         team.Id,
         team.OrganizationId,
+        team.LeaderUserId,
         team.Name,
         team.Description,
         team.CreatedAtUtc,
@@ -68,6 +84,16 @@ internal sealed class CreateTeamCommandHandler(
             return Result<TeamResponse>.Failure(OrganizationErrors.NotFound);
         }
 
+        if (!organization.IsOwner(request.RequestingUserId))
+        {
+            return Result<TeamResponse>.Failure(TeamErrors.OwnerRequired);
+        }
+
+        if (!organization.HasMember(request.LeaderUserId))
+        {
+            return Result<TeamResponse>.Failure(TeamErrors.UserMustBelongToOrganization);
+        }
+
         if (await teamRepository.NameExistsAsync(
                 organization.Id,
                 request.Name,
@@ -78,6 +104,7 @@ internal sealed class CreateTeamCommandHandler(
 
         var team = Team.Create(
             organization.Id,
+            request.LeaderUserId,
             request.Name,
             request.Description,
             timeProvider.GetUtcNow());
@@ -130,6 +157,23 @@ internal sealed class UpdateTeamCommandHandler(
             return Result<TeamResponse>.Failure(TeamErrors.NotFound);
         }
 
+        if (!organization.IsOwner(request.RequestingUserId) &&
+            !team.IsLeader(request.RequestingUserId))
+        {
+            return Result<TeamResponse>.Failure(TeamErrors.TeamManagementRequired);
+        }
+
+        if (request.LeaderUserId != team.LeaderUserId &&
+            !organization.IsOwner(request.RequestingUserId))
+        {
+            return Result<TeamResponse>.Failure(TeamErrors.OwnerRequired);
+        }
+
+        if (!organization.HasMember(request.LeaderUserId))
+        {
+            return Result<TeamResponse>.Failure(TeamErrors.UserMustBelongToOrganization);
+        }
+
         if (await teamRepository.NameExistsAsync(
                 organization.Id,
                 request.Name,
@@ -139,7 +183,11 @@ internal sealed class UpdateTeamCommandHandler(
             return Result<TeamResponse>.Failure(TeamErrors.NameAlreadyExists);
         }
 
-        team.Update(request.Name, request.Description, timeProvider.GetUtcNow());
+        team.Update(
+            request.Name,
+            request.Description,
+            request.LeaderUserId,
+            timeProvider.GetUtcNow());
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -169,6 +217,11 @@ internal sealed class DeleteTeamCommandHandler(
         if (organization is null || !organization.HasMember(request.RequestingUserId))
         {
             return Result<Unit>.Failure(OrganizationErrors.NotFound);
+        }
+
+        if (!organization.IsOwner(request.RequestingUserId))
+        {
+            return Result<Unit>.Failure(TeamErrors.OwnerRequired);
         }
 
         var team = await teamRepository.GetByIdAsync(
@@ -219,6 +272,12 @@ internal sealed class AddTeamMemberCommandHandler(
             return Result<Unit>.Failure(TeamErrors.NotFound);
         }
 
+        if (!organization.IsOwner(request.RequestingUserId) &&
+            !team.IsLeader(request.RequestingUserId))
+        {
+            return Result<Unit>.Failure(TeamErrors.TeamManagementRequired);
+        }
+
         if (team.AddMember(request.UserId, timeProvider.GetUtcNow()))
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -253,6 +312,17 @@ internal sealed class RemoveTeamMemberCommandHandler(
         if (team is null)
         {
             return Result<Unit>.Failure(TeamErrors.NotFound);
+        }
+
+        if (!organization.IsOwner(request.RequestingUserId) &&
+            !team.IsLeader(request.RequestingUserId))
+        {
+            return Result<Unit>.Failure(TeamErrors.TeamManagementRequired);
+        }
+
+        if (team.IsLeader(request.UserId))
+        {
+            return Result<Unit>.Failure(TeamErrors.LeaderCannotBeRemoved);
         }
 
         if (team.RemoveMember(request.UserId))

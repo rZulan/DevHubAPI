@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace DevHub.Api.Controllers;
 
 public sealed record SaveOrganizationRequest(
-    [property: Required, StringLength(150)] string Name,
-    [property: StringLength(1000)] string? Description);
+    [Required, StringLength(150)] string Name,
+    [StringLength(1000)] string? Description);
 
 /// <summary>Creates and manages organizations and organization membership.</summary>
 [Tags("Organizations")]

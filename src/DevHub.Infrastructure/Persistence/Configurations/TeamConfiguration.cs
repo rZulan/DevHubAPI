@@ -1,4 +1,5 @@
 using DevHub.Domain.Teams;
+using DevHub.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -10,6 +11,12 @@ internal sealed class TeamConfiguration : IEntityTypeConfiguration<Team>
     {
         builder.ToTable("Teams");
         builder.HasKey(team => team.Id);
+        builder.Property(team => team.LeaderUserId).IsRequired();
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(team => team.LeaderUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(team => team.LeaderUserId);
         builder.Property(team => team.Name).HasMaxLength(150).IsRequired();
         builder.Property(team => team.NormalizedName).HasMaxLength(150).IsRequired();
         builder.HasIndex(team => new { team.OrganizationId, team.NormalizedName }).IsUnique();

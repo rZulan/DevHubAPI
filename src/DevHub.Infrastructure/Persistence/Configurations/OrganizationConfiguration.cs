@@ -1,4 +1,5 @@
 using DevHub.Domain.Organizations;
+using DevHub.Domain.Users;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -10,6 +11,13 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
     {
         builder.ToTable("Organizations");
         builder.HasKey(organization => organization.Id);
+
+        builder.Property(organization => organization.OwnerUserId).IsRequired();
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(organization => organization.OwnerUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(organization => organization.OwnerUserId);
 
         builder.Property(organization => organization.Name).HasMaxLength(150).IsRequired();
         builder.Property(organization => organization.NormalizedName).HasMaxLength(150).IsRequired();

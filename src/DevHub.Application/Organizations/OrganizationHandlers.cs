@@ -35,6 +35,7 @@ internal static class OrganizationMappings
 {
     public static OrganizationResponse ToResponse(this Organization organization) => new(
         organization.Id,
+        organization.OwnerUserId,
         organization.Name,
         organization.Description,
         organization.CreatedAtUtc,

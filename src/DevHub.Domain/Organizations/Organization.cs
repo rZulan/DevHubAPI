@@ -14,14 +14,17 @@ public sealed class Organization : BaseEntity
 
     private Organization(
         Guid id,
+        Guid ownerUserId,
         string name,
         string? description,
         DateTimeOffset createdAtUtc)
         : base(id, createdAtUtc)
     {
+        OwnerUserId = ownerUserId;
         SetDetails(name, description);
     }
 
+    public Guid OwnerUserId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? Description { get; private set; }
@@ -34,7 +37,12 @@ public sealed class Organization : BaseEntity
         Guid creatorUserId,
         DateTimeOffset createdAtUtc)
     {
-        var organization = new Organization(Guid.NewGuid(), name, description, createdAtUtc);
+        var organization = new Organization(
+            Guid.NewGuid(),
+            creatorUserId,
+            name,
+            description,
+            createdAtUtc);
         organization.AddMember(creatorUserId, createdAtUtc);
         return organization;
     }
@@ -46,6 +54,8 @@ public sealed class Organization : BaseEntity
     }
 
     public bool HasMember(Guid userId) => _members.Any(member => member.UserId == userId);
+
+    public bool IsOwner(Guid userId) => OwnerUserId == userId;
 
     public bool AddMember(Guid userId, DateTimeOffset joinedAtUtc)
     {
@@ -60,6 +70,11 @@ public sealed class Organization : BaseEntity
 
     public bool RemoveMember(Guid userId)
     {
+        if (IsOwner(userId) || _teams.Any(team => team.IsLeader(userId)))
+        {
+            return false;
+        }
+
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
         if (member is null)
         {
