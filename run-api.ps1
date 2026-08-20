@@ -36,7 +36,7 @@ foreach ($listenerProcessId in $listenerProcessIds)
     Wait-Process -Id $listenerProcessId -Timeout 10 -ErrorAction SilentlyContinue
 }
 
-$runArguments = @("run", "--project", $projectPath)
+$runArguments = @("run", "--project", $projectPath, "--launch-profile", "https")
 
 if ($NoBuild)
 {
