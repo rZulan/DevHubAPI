@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
+        services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
 

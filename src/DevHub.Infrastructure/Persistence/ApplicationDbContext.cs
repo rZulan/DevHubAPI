@@ -5,6 +5,7 @@ using DevHub.Domain.Authentication;
 using DevHub.Domain.Users;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Teams;
+using DevHub.Domain.Projects;
 
 namespace DevHub.Infrastructure.Persistence;
 
@@ -21,6 +22,8 @@ public sealed class ApplicationDbContext(
     public DbSet<Organization> Organizations => Set<Organization>();
 
     public DbSet<Team> Teams => Set<Team>();
+
+    public DbSet<Project> Projects => Set<Project>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)
