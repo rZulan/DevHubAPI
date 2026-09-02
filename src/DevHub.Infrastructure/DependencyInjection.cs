@@ -87,10 +87,16 @@ public static class DependencyInjection
                 options =>
                 {
                     options.ForwardDefaultSelector = context =>
-                        context.Request.Headers.Authorization.ToString()
-                            .StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                    {
+                        var hasBearerHeader = context.Request.Headers.Authorization.ToString()
+                            .StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+                        var hasHubAccessToken = context.Request.Path.StartsWithSegments("/hubs") &&
+                            context.Request.Query.ContainsKey("access_token");
+
+                        return hasBearerHeader || hasHubAccessToken
                             ? JwtBearerDefaults.AuthenticationScheme
                             : CookieAuthenticationDefaults.AuthenticationScheme;
+                    };
                 })
             .AddJwtBearer(options =>
             {
@@ -108,6 +114,18 @@ public static class DependencyInjection
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(1)
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = context.Request.Query["access_token"];
+                        }
+
+                        return Task.CompletedTask;
+                    }
                 };
             })
             .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>

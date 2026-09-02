@@ -2,6 +2,7 @@ using DevHub.Api.OpenApi;
 using DevHub.Api.Errors;
 using DevHub.Application;
 using DevHub.Infrastructure;
+using DevHub.Api.Realtime;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,6 +25,9 @@ builder.Services.AddProblemDetails(options =>
             context.HttpContext,
             $"Http.{context.ProblemDetails.Status ?? StatusCodes.Status500InternalServerError}");
 });
+
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<WorkshopPresenceTracker>();
 
 builder.Services.AddOpenApi(options =>
 {
@@ -80,5 +84,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<WorkshopHub>("/hubs/workshop");
 
 app.Run();
