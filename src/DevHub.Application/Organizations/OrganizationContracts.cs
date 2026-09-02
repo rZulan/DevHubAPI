@@ -15,6 +15,29 @@ public sealed record OrganizationResponse(
     int MemberCount,
     int TeamCount);
 
+public sealed record OrganizationRoleResponse(
+    Guid Id,
+    string Name,
+    string Color,
+    int Position,
+    bool IsOwnerRole,
+    bool IsDefaultRole,
+    IReadOnlyList<string> Permissions,
+    int MemberCount);
+
+public sealed record OrganizationMemberResponse(
+    Guid Id,
+    string Email,
+    string FirstName,
+    string LastName,
+    DateTimeOffset CreatedAtUtc,
+    string? Username,
+    DateOnly? DateOfBirth,
+    string? AvatarUrl,
+    IReadOnlyCollection<ConnectedAccountResponse> ConnectedAccounts,
+    bool IsOwner,
+    IReadOnlyList<Guid> RoleIds);
+
 public sealed record CreateOrganizationCommand(
     Guid RequestingUserId,
     [property: Required, StringLength(150)] string Name,
@@ -48,4 +71,59 @@ public sealed record GetOrganizationQuery(Guid OrganizationId, Guid RequestingUs
     : IRequest<Result<OrganizationResponse>>;
 
 public sealed record ListOrganizationMembersQuery(Guid OrganizationId, Guid RequestingUserId)
-    : IRequest<Result<IReadOnlyList<UserResponse>>>;
+    : IRequest<Result<IReadOnlyList<OrganizationMemberResponse>>>;
+
+public sealed record ListOrganizationRolesQuery(Guid OrganizationId, Guid RequestingUserId)
+    : IRequest<Result<IReadOnlyList<OrganizationRoleResponse>>>;
+
+public sealed record CreateOrganizationRoleCommand(
+    Guid OrganizationId,
+    Guid RequestingUserId,
+    [property: Required, StringLength(100)] string Name,
+    [property: Required, StringLength(20)] string Color,
+    IReadOnlyList<string> Permissions)
+    : IRequest<Result<OrganizationRoleResponse>>;
+
+public sealed record UpdateOrganizationRoleCommand(
+    Guid OrganizationId,
+    Guid RoleId,
+    Guid RequestingUserId,
+    [property: Required, StringLength(100)] string Name,
+    [property: Required, StringLength(20)] string Color,
+    int Position,
+    IReadOnlyList<string> Permissions)
+    : IRequest<Result<OrganizationRoleResponse>>;
+
+public sealed record DeleteOrganizationRoleCommand(
+    Guid OrganizationId,
+    Guid RoleId,
+    Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record AssignOrganizationRoleCommand(
+    Guid OrganizationId,
+    Guid RoleId,
+    Guid UserId,
+    Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record RemoveOrganizationRoleCommand(
+    Guid OrganizationId,
+    Guid RoleId,
+    Guid UserId,
+    Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record PromoteOrganizationOwnerCommand(
+    Guid OrganizationId,
+    Guid UserId,
+    Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record LeaveOrganizationCommand(
+    Guid OrganizationId,
+    Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record OrganizationInviteResponse(string Token, DateTimeOffset ExpiresAtUtc);
+
+public sealed record CreateOrganizationInviteCommand(Guid OrganizationId, Guid RequestingUserId)
+    : IRequest<Result<OrganizationInviteResponse>>;
+
+public sealed record AcceptOrganizationInviteCommand(string Token, Guid RequestingUserId)
+    : IRequest<Result<OrganizationResponse>>;

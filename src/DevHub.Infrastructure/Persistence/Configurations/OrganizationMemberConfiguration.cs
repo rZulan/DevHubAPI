@@ -11,10 +11,13 @@ internal sealed class OrganizationMemberConfiguration : IEntityTypeConfiguration
         builder.ToTable("OrganizationMembers");
         builder.HasKey(member => new { member.OrganizationId, member.UserId });
         builder.Property(member => member.JoinedAtUtc).IsRequired();
+        builder.Property(member => member.IsOwner).IsRequired();
         builder.HasOne(member => member.User)
             .WithMany()
             .HasForeignKey(member => member.UserId)
             .OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(member => member.UserId);
+        builder.Navigation(member => member.RoleAssignments)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

@@ -21,6 +21,12 @@ public sealed class ApplicationDbContext(
 
     public DbSet<Organization> Organizations => Set<Organization>();
 
+    public DbSet<OrganizationInvite> OrganizationInvites => Set<OrganizationInvite>();
+
+    public DbSet<OrganizationRole> OrganizationRoles => Set<OrganizationRole>();
+
+    public DbSet<OrganizationMemberRole> OrganizationMemberRoles => Set<OrganizationMemberRole>();
+
     public DbSet<Team> Teams => Set<Team>();
 
     public DbSet<Project> Projects => Set<Project>();

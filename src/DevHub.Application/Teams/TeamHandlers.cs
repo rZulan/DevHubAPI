@@ -2,6 +2,7 @@ using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Application.Organizations;
 using DevHub.Application.Users;
+using DevHub.Domain.Organizations;
 using DevHub.Domain.Teams;
 using MediatR;
 
@@ -84,7 +85,9 @@ internal sealed class CreateTeamCommandHandler(
             return Result<TeamResponse>.Failure(OrganizationErrors.NotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId))
+        if (!organization.HasPermission(
+            request.RequestingUserId,
+            OrganizationPermissions.ManageTeams))
         {
             return Result<TeamResponse>.Failure(TeamErrors.OwnerRequired);
         }
@@ -157,14 +160,14 @@ internal sealed class UpdateTeamCommandHandler(
             return Result<TeamResponse>.Failure(TeamErrors.NotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageTeams) &&
             !team.IsLeader(request.RequestingUserId))
         {
             return Result<TeamResponse>.Failure(TeamErrors.TeamManagementRequired);
         }
 
         if (request.LeaderUserId != team.LeaderUserId &&
-            !organization.IsOwner(request.RequestingUserId))
+            !organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageTeams))
         {
             return Result<TeamResponse>.Failure(TeamErrors.OwnerRequired);
         }
@@ -219,7 +222,9 @@ internal sealed class DeleteTeamCommandHandler(
             return Result<Unit>.Failure(OrganizationErrors.NotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId))
+        if (!organization.HasPermission(
+            request.RequestingUserId,
+            OrganizationPermissions.ManageTeams))
         {
             return Result<Unit>.Failure(TeamErrors.OwnerRequired);
         }
@@ -272,7 +277,7 @@ internal sealed class AddTeamMemberCommandHandler(
             return Result<Unit>.Failure(TeamErrors.NotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageTeams) &&
             !team.IsLeader(request.RequestingUserId))
         {
             return Result<Unit>.Failure(TeamErrors.TeamManagementRequired);
@@ -314,7 +319,7 @@ internal sealed class RemoveTeamMemberCommandHandler(
             return Result<Unit>.Failure(TeamErrors.NotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageTeams) &&
             !team.IsLeader(request.RequestingUserId))
         {
             return Result<Unit>.Failure(TeamErrors.TeamManagementRequired);

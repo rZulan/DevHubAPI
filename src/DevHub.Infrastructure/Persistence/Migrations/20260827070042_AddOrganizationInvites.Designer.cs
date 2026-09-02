@@ -4,6 +4,7 @@ using DevHub.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DevHub.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260827070042_AddOrganizationInvites")]
+    partial class AddOrganizationInvites
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -205,9 +208,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<bool>("IsOwner")
-                        .HasColumnType("bit");
-
                     b.Property<DateTimeOffset>("JoinedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -216,76 +216,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("OrganizationMembers", (string)null);
-                });
-
-            modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMemberRole", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTimeOffset>("AssignedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.HasKey("OrganizationId", "UserId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.ToTable("OrganizationMemberRoles", (string)null);
-                });
-
-            modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationRole", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Color")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTimeOffset>("CreatedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<bool>("IsDefaultRole")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsOwnerRole")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("PermissionsValue")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<int>("Position")
-                        .HasColumnType("int");
-
-                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
-                        .HasColumnType("datetimeoffset");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrganizationId", "Name")
-                        .IsUnique();
-
-                    b.HasIndex("OrganizationId", "Position");
-
-                    b.ToTable("OrganizationRoles", (string)null);
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.Project", b =>
@@ -570,36 +500,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMemberRole", b =>
-                {
-                    b.HasOne("DevHub.Domain.Organizations.OrganizationRole", "Role")
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("DevHub.Domain.Organizations.OrganizationMember", "Member")
-                        .WithMany("RoleAssignments")
-                        .HasForeignKey("OrganizationId", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Member");
-
-                    b.Navigation("Role");
-                });
-
-            modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationRole", b =>
-                {
-                    b.HasOne("DevHub.Domain.Organizations.Organization", "Organization")
-                        .WithMany("Roles")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
-                });
-
             modelBuilder.Entity("DevHub.Domain.Projects.Project", b =>
                 {
                     b.HasOne("DevHub.Domain.Users.User", "Lead")
@@ -667,14 +567,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Members");
 
-                    b.Navigation("Roles");
-
                     b.Navigation("Teams");
-                });
-
-            modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMember", b =>
-                {
-                    b.Navigation("RoleAssignments");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Teams.Team", b =>

@@ -4,15 +4,20 @@ namespace DevHub.Application.Users;
 
 internal static class UserMappings
 {
-    public static UserResponse ToUserResponse(this User user) =>
-        new(
+    public static UserResponse ToUserResponse(this User user)
+    {
+        var avatarUrl = user.AvatarUrl ?? user.ExternalAccounts
+            .Select(account => account.AvatarUrl)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+        return new(
             user.Id,
             user.Email,
             user.Username,
             user.FirstName,
             user.LastName,
             user.DateOfBirth,
-            user.AvatarUrl,
+            avatarUrl,
             user.ExternalAccounts
                 .OrderBy(account => account.Provider)
                 .Select(account => new ConnectedAccountResponse(
@@ -20,4 +25,5 @@ internal static class UserMappings
                     account.ProviderUsername))
                 .ToArray(),
             user.CreatedAtUtc);
+    }
 }

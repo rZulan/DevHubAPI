@@ -1,6 +1,7 @@
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Application.Organizations;
+using DevHub.Domain.Organizations;
 using DevHub.Domain.Projects;
 using DevHub.Domain.Teams;
 using MediatR;
@@ -164,7 +165,7 @@ internal sealed class CreateProjectCommandHandler(
             return Result<ProjectResponse>.Failure(ProjectErrors.TeamNotFound);
         }
 
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageProjects) &&
             !team.IsLeader(request.RequestingUserId))
         {
             return Result<ProjectResponse>.Failure(ProjectErrors.ManagementRequired);
@@ -265,13 +266,14 @@ internal sealed class UpdateProjectCommandHandler(
         }
 
         var currentTeam = organization.Teams.Single(team => team.Id == project.TeamId);
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageProjects) &&
             !currentTeam.IsLeader(request.RequestingUserId))
         {
             return Result<ProjectResponse>.Failure(ProjectErrors.ManagementRequired);
         }
 
-        if (project.TeamId != request.TeamId && !organization.IsOwner(request.RequestingUserId))
+        if (project.TeamId != request.TeamId &&
+            !organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageProjects))
         {
             return Result<ProjectResponse>.Failure(ProjectErrors.OwnerRequiredToMove);
         }
@@ -369,7 +371,7 @@ internal sealed class DeleteProjectCommandHandler(
         }
 
         var team = organization.Teams.Single(candidate => candidate.Id == project.TeamId);
-        if (!organization.IsOwner(request.RequestingUserId) &&
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ManageProjects) &&
             !team.IsLeader(request.RequestingUserId))
         {
             return Result<Unit>.Failure(ProjectErrors.ManagementRequired);
@@ -401,7 +403,7 @@ internal sealed class ListProjectsQueryHandler(
         var projects = await projectRepository.ListVisibleAsync(
             organization.Id,
             request.RequestingUserId,
-            organization.IsOwner(request.RequestingUserId),
+            organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ViewAllProjects),
             cancellationToken);
         return Result<IReadOnlyList<ProjectResponse>>.Success(
             projects.Select(project => project.ToResponse()).ToArray());
@@ -435,7 +437,7 @@ internal sealed class GetProjectQueryHandler(
         }
 
         var team = organization.Teams.Single(candidate => candidate.Id == project.TeamId);
-        var canView = organization.IsOwner(request.RequestingUserId) ||
+        var canView = organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ViewAllProjects) ||
                       team.HasMember(request.RequestingUserId);
         return canView
             ? Result<ProjectResponse>.Success(project.ToResponse())

@@ -11,6 +11,12 @@ public sealed record SaveOrganizationRequest(
     [Required, StringLength(150)] string Name,
     [StringLength(1000)] string? Description);
 
+public sealed record SaveOrganizationRoleRequest(
+    [Required, StringLength(100)] string Name,
+    [Required, StringLength(20)] string Color,
+    int Position,
+    IReadOnlyList<string> Permissions);
+
 /// <summary>Creates and manages organizations and organization membership.</summary>
 [Tags("Organizations")]
 [Route("api/organizations")]
@@ -95,7 +101,7 @@ public sealed class OrganizationsController(ISender sender) : ApiControllerBase
 
     [HttpGet("{organizationId:guid}/members")]
     [EndpointName("ListOrganizationMembers")]
-    [ProducesResponseType<IReadOnlyList<UserResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<IReadOnlyList<OrganizationMemberResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ListMembers(
         Guid organizationId,
@@ -137,6 +143,145 @@ public sealed class OrganizationsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             new RemoveOrganizationMemberCommand(organizationId, memberUserId, userId),
             cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
+    [HttpPost("{organizationId:guid}/invites")]
+    [EndpointName("CreateOrganizationInvite")]
+    [ProducesResponseType<OrganizationInviteResponse>(StatusCodes.Status201Created)]
+    public async Task<IActionResult> CreateInvite(
+        Guid organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new CreateOrganizationInviteCommand(organizationId, userId),
+            cancellationToken);
+        return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPost("invites/{token}/accept")]
+    [EndpointName("AcceptOrganizationInvite")]
+    [ProducesResponseType<OrganizationResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> AcceptInvite(
+        string token,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new AcceptOrganizationInviteCommand(token, userId),
+            cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpGet("{organizationId:guid}/roles")]
+    [EndpointName("ListOrganizationRoles")]
+    [ProducesResponseType<IReadOnlyList<OrganizationRoleResponse>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListRoles(
+        Guid organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new ListOrganizationRolesQuery(organizationId, userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPost("{organizationId:guid}/roles")]
+    [EndpointName("CreateOrganizationRole")]
+    public async Task<IActionResult> CreateRole(
+        Guid organizationId,
+        [FromBody] SaveOrganizationRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new CreateOrganizationRoleCommand(
+            organizationId, userId, request.Name, request.Color, request.Permissions),
+            cancellationToken);
+        return result.IsSuccess
+            ? StatusCode(StatusCodes.Status201Created, result.Value)
+            : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/roles/{roleId:guid}")]
+    [EndpointName("UpdateOrganizationRole")]
+    public async Task<IActionResult> UpdateRole(
+        Guid organizationId,
+        Guid roleId,
+        [FromBody] SaveOrganizationRoleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new UpdateOrganizationRoleCommand(
+            organizationId, roleId, userId, request.Name, request.Color,
+            request.Position, request.Permissions), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpDelete("{organizationId:guid}/roles/{roleId:guid}")]
+    [EndpointName("DeleteOrganizationRole")]
+    public async Task<IActionResult> DeleteRole(
+        Guid organizationId,
+        Guid roleId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new DeleteOrganizationRoleCommand(organizationId, roleId, userId),
+            cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/roles/{roleId:guid}/members/{memberUserId:guid}")]
+    [EndpointName("AssignOrganizationRole")]
+    public async Task<IActionResult> AssignRole(
+        Guid organizationId,
+        Guid roleId,
+        Guid memberUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new AssignOrganizationRoleCommand(
+            organizationId, roleId, memberUserId, userId), cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
+    [HttpDelete("{organizationId:guid}/roles/{roleId:guid}/members/{memberUserId:guid}")]
+    [EndpointName("RemoveOrganizationRole")]
+    public async Task<IActionResult> RemoveRole(
+        Guid organizationId,
+        Guid roleId,
+        Guid memberUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new RemoveOrganizationRoleCommand(
+            organizationId, roleId, memberUserId, userId), cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/owners/{memberUserId:guid}")]
+    [EndpointName("PromoteOrganizationOwner")]
+    public async Task<IActionResult> PromoteOwner(
+        Guid organizationId,
+        Guid memberUserId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new PromoteOrganizationOwnerCommand(
+            organizationId, memberUserId, userId), cancellationToken);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
+    [HttpDelete("{organizationId:guid}/members/me")]
+    [EndpointName("LeaveOrganization")]
+    public async Task<IActionResult> Leave(
+        Guid organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new LeaveOrganizationCommand(organizationId, userId), cancellationToken);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 }

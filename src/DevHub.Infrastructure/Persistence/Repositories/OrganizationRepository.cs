@@ -14,6 +14,8 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
         dbContext.Organizations
             .AsSplitQuery()
             .Include(organization => organization.Members)
+                .ThenInclude(member => member.RoleAssignments)
+            .Include(organization => organization.Roles)
             .Include(organization => organization.Teams)
                 .ThenInclude(team => team.Members)
             .SingleOrDefaultAsync(organization => organization.Id == id, cancellationToken);
@@ -25,6 +27,8 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
             .AsNoTracking()
             .AsSplitQuery()
             .Include(organization => organization.Members)
+                .ThenInclude(member => member.RoleAssignments)
+            .Include(organization => organization.Roles)
             .Include(organization => organization.Teams)
             .Where(organization => organization.Members.Any(member => member.UserId == userId))
             .OrderBy(organization => organization.Name)
@@ -35,6 +39,7 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
         CancellationToken cancellationToken = default) =>
         await dbContext.Users
             .AsNoTracking()
+            .Include(user => user.ExternalAccounts)
             .Where(user => dbContext.Set<OrganizationMember>().Any(
                 member => member.OrganizationId == organizationId && member.UserId == user.Id))
             .OrderBy(user => user.FirstName)
@@ -53,6 +58,13 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
             cancellationToken);
     }
 
+    public Task<OrganizationInvite?> GetInviteByTokenHashAsync(
+        string tokenHash,
+        CancellationToken cancellationToken = default) =>
+        dbContext.OrganizationInvites
+            .SingleOrDefaultAsync(invite => invite.TokenHash == tokenHash, cancellationToken);
+
     public void Add(Organization organization) => dbContext.Organizations.Add(organization);
+    public void AddInvite(OrganizationInvite invite) => dbContext.OrganizationInvites.Add(invite);
     public void Remove(Organization organization) => dbContext.Organizations.Remove(organization);
 }

@@ -36,9 +36,16 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
             .HasForeignKey(team => team.OrganizationId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasMany(organization => organization.Roles)
+            .WithOne(role => role.Organization)
+            .HasForeignKey(role => role.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         builder.Navigation(organization => organization.Members)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Navigation(organization => organization.Teams)
+            .UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(organization => organization.Roles)
             .UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
