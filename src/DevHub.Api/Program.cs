@@ -26,7 +26,9 @@ builder.Services.AddProblemDetails(options =>
             $"Http.{context.ProblemDetails.Status ?? StatusCodes.Status500InternalServerError}");
 });
 
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment());
+builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ChatUserIdProvider>();
 builder.Services.AddSingleton<WorkshopPresenceTracker>();
 
 builder.Services.AddOpenApi(options =>
@@ -85,5 +87,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<WorkshopHub>("/hubs/workshop");
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

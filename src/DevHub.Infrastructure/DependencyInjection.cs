@@ -19,6 +19,8 @@ using DevHub.Application.Abstractions.Persistence;
 using DevHub.Infrastructure.Authentication;
 using DevHub.Infrastructure.Persistence;
 using DevHub.Infrastructure.Persistence.Repositories;
+using DevHub.Application.Chats;
+using DevHub.Infrastructure.Chats;
 
 namespace DevHub.Infrastructure;
 
@@ -41,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IChatService, ChatService>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
 
@@ -48,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, PasswordHasherAdapter>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddSingleton<IRefreshTokenService, RefreshTokenService>();
+        services.AddSingleton<IChatMessageCipher, AesChatMessageCipher>();
 
         var jwtSection = configuration.GetRequiredSection(JwtOptions.SectionName);
         var cookieSection = configuration.GetSection(AuthenticationCookieOptions.SectionName);

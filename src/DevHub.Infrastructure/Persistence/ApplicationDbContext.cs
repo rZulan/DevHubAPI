@@ -6,6 +6,7 @@ using DevHub.Domain.Users;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Teams;
 using DevHub.Domain.Projects;
+using DevHub.Domain.Chats;
 
 namespace DevHub.Infrastructure.Persistence;
 
@@ -30,6 +31,12 @@ public sealed class ApplicationDbContext(
     public DbSet<Team> Teams => Set<Team>();
 
     public DbSet<Project> Projects => Set<Project>();
+
+    public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
+
+    public DbSet<ChatParticipant> ChatParticipants => Set<ChatParticipant>();
+
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)
