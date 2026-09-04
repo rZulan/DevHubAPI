@@ -99,6 +99,10 @@ public sealed class Organization : BaseEntity
               !role.IsOwnerRole &&
               HighestRolePosition(requestingUserId) < role.Position;
 
+    public bool CanGrantPermissions(Guid requestingUserId, IEnumerable<string> permissions) =>
+        IsOwner(requestingUserId) ||
+        permissions.All(permission => HasPermission(requestingUserId, permission));
+
     public bool AddMember(Guid userId, DateTimeOffset joinedAtUtc)
     {
         if (HasMember(userId))

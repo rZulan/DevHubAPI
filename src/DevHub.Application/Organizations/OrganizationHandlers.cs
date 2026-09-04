@@ -46,6 +46,11 @@ internal static class OrganizationErrors
         "You can only manage roles and members below your highest role.",
         ErrorType.Forbidden);
 
+    public static readonly Error CannotGrantPermission = new(
+        "Organizations.CannotGrantPermission",
+        "You cannot grant a permission you do not have yourself.",
+        ErrorType.Forbidden);
+
     public static readonly Error LastOwner = new(
         "Organizations.LastOwner",
         "Promote another organization owner before leaving.",
@@ -504,6 +509,10 @@ internal sealed class CreateOrganizationRoleCommandHandler(
         {
             return Result<OrganizationRoleResponse>.Failure(OrganizationErrors.PermissionRequired);
         }
+        if (!organization.CanGrantPermissions(request.RequestingUserId, request.Permissions))
+        {
+            return Result<OrganizationRoleResponse>.Failure(OrganizationErrors.CannotGrantPermission);
+        }
         if (organization.Roles.Any(role => role.Name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
             return Result<OrganizationRoleResponse>.Failure(OrganizationErrors.RoleNameAlreadyExists);
@@ -547,6 +556,10 @@ internal sealed class UpdateOrganizationRoleCommandHandler(
             request.Position <= organization.HighestRolePosition(request.RequestingUserId))
         {
             return Result<OrganizationRoleResponse>.Failure(OrganizationErrors.RoleHierarchy);
+        }
+        if (!role.IsOwnerRole && !organization.CanGrantPermissions(request.RequestingUserId, request.Permissions))
+        {
+            return Result<OrganizationRoleResponse>.Failure(OrganizationErrors.CannotGrantPermission);
         }
         if (organization.Roles.Any(candidate => candidate.Id != role.Id &&
             candidate.Name.Equals(request.Name.Trim(), StringComparison.OrdinalIgnoreCase)))
