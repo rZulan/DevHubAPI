@@ -127,3 +127,25 @@ public sealed record CreateOrganizationInviteCommand(Guid OrganizationId, Guid R
 
 public sealed record AcceptOrganizationInviteCommand(string Token, Guid RequestingUserId)
     : IRequest<Result<OrganizationResponse>>;
+
+public sealed record DashboardWidgetDefinition(
+    string Id,
+    string Type,
+    string Size,
+    string? Content,
+    double Height = 1,
+    double? Width = null,
+    string? SectionId = null);
+
+public sealed record OrganizationDashboardResponse(
+    IReadOnlyList<DashboardWidgetDefinition> Widgets,
+    DateTimeOffset? PublishedAtUtc);
+
+public sealed record GetOrganizationDashboardQuery(Guid OrganizationId, Guid RequestingUserId)
+    : IRequest<Result<OrganizationDashboardResponse>>;
+
+public sealed record PublishOrganizationDashboardCommand(
+    Guid OrganizationId,
+    Guid RequestingUserId,
+    IReadOnlyList<DashboardWidgetDefinition> Widgets)
+    : IRequest<Result<OrganizationDashboardResponse>>;

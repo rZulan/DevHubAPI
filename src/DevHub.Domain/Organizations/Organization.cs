@@ -29,6 +29,8 @@ public sealed class Organization : BaseEntity
     public string Name { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? Description { get; private set; }
+    public string? DashboardLayoutJson { get; private set; }
+    public DateTimeOffset? DashboardPublishedAtUtc { get; private set; }
     public IReadOnlyCollection<OrganizationMember> Members => _members;
     public IReadOnlyCollection<OrganizationRole> Roles => _roles;
     public IReadOnlyCollection<Team> Teams => _teams;
@@ -61,6 +63,13 @@ public sealed class Organization : BaseEntity
     {
         SetDetails(name, description);
         MarkUpdated(updatedAtUtc);
+    }
+
+    public void PublishDashboard(string dashboardLayoutJson, DateTimeOffset publishedAtUtc)
+    {
+        DashboardLayoutJson = dashboardLayoutJson;
+        DashboardPublishedAtUtc = publishedAtUtc;
+        MarkUpdated(publishedAtUtc);
     }
 
     public bool HasMember(Guid userId) => _members.Any(member => member.UserId == userId);

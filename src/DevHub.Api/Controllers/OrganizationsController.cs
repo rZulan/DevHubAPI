@@ -1,9 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 using DevHub.Application.Organizations;
 using DevHub.Application.Users;
+using DevHub.Api.Realtime;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace DevHub.Api.Controllers;
 
@@ -17,11 +19,16 @@ public sealed record SaveOrganizationRoleRequest(
     int Position,
     IReadOnlyList<string> Permissions);
 
+public sealed record SaveOrganizationDashboardRequest(
+    [Required] IReadOnlyList<DashboardWidgetDefinition> Widgets);
+
 /// <summary>Creates and manages organizations and organization membership.</summary>
 [Tags("Organizations")]
 [Route("api/organizations")]
 [Authorize]
-public sealed class OrganizationsController(ISender sender) : ApiControllerBase
+public sealed class OrganizationsController(
+    ISender sender,
+    IHubContext<WorkshopHub> workshopHub) : ApiControllerBase
 {
     [HttpGet]
     [EndpointName("ListOrganizations")]
@@ -172,6 +179,37 @@ public sealed class OrganizationsController(ISender sender) : ApiControllerBase
             new AcceptOrganizationInviteCommand(token, userId),
             cancellationToken);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpGet("{organizationId:guid}/dashboard")]
+    [EndpointName("GetOrganizationDashboard")]
+    [ProducesResponseType<OrganizationDashboardResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDashboard(
+        Guid organizationId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(
+            new GetOrganizationDashboardQuery(organizationId, userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/dashboard")]
+    [EndpointName("PublishOrganizationDashboard")]
+    [ProducesResponseType<OrganizationDashboardResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> PublishDashboard(
+        Guid organizationId,
+        [FromBody] SaveOrganizationDashboardRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new PublishOrganizationDashboardCommand(
+            organizationId, userId, request.Widgets), cancellationToken);
+        if (!result.IsSuccess) return Failure(result.Error!);
+
+        await workshopHub.Clients.Group(WorkshopHub.GetGroupName(organizationId)).SendAsync(
+            "DashboardPublished", organizationId.ToString(), cancellationToken);
+        return Ok(result.Value);
     }
 
     [HttpGet("{organizationId:guid}/roles")]

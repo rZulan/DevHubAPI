@@ -6,6 +6,7 @@ using DevHub.Domain.Users;
 using MediatR;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 namespace DevHub.Application.Organizations;
 
@@ -466,6 +467,157 @@ internal sealed class AcceptOrganizationInviteCommandHandler(
         }
 
         return Result<OrganizationResponse>.Success(organization.ToResponse());
+    }
+}
+
+internal static class OrganizationDashboard
+{
+    private static readonly HashSet<string> SupportedTypes =
+    [
+        "welcome",
+        "quick-actions",
+        "quick-action-project",
+        "quick-action-tasks",
+        "quick-action-idea",
+        "quick-action-team",
+        "assigned-tasks",
+        "project-stats",
+        "recent-activity",
+        "online-members",
+        "project-overview",
+        "team-distribution",
+        "text"
+    ];
+
+    private static readonly HashSet<string> SupportedSizes = ["full", "two-thirds", "half", "third", "sixth"];
+
+    private static readonly Dictionary<string, (double Width, double Height)> MinimumDimensions = new(StringComparer.Ordinal)
+    {
+        ["quick-actions"] = (2, 1.5),
+        ["quick-action-project"] = (1, 1),
+        ["quick-action-tasks"] = (1, 1),
+        ["quick-action-idea"] = (1, 1),
+        ["quick-action-team"] = (1, 1),
+        ["project-stats"] = (2, 1),
+        ["team-distribution"] = (1.5, 1),
+        ["welcome"] = (1.5, 1),
+        ["assigned-tasks"] = (2, 1),
+        ["recent-activity"] = (1.5, 1.5),
+        ["online-members"] = (1, 1),
+        ["project-overview"] = (1, 1),
+        ["text"] = (0.5, 0.5)
+    };
+
+    public static IReadOnlyDictionary<string, string[]> Validate(
+        IReadOnlyList<DashboardWidgetDefinition> widgets)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (widgets.Count > 30)
+        {
+            errors[nameof(widgets)] = ["A dashboard can contain at most 30 widgets."];
+            return errors;
+        }
+
+        if (widgets.Any(widget =>
+            string.IsNullOrWhiteSpace(widget.Id) || widget.Id.Length > 100 ||
+            !SupportedTypes.Contains(widget.Type) ||
+            !SupportedSizes.Contains(widget.Size) ||
+            !HasValidDimensions(widget) ||
+            (widget.SectionId is not null && (string.IsNullOrWhiteSpace(widget.SectionId) || widget.SectionId.Length > 100)) ||
+            (widget.Content?.Length ?? 0) > 2000))
+        {
+            errors[nameof(widgets)] = ["One or more dashboard widgets are invalid."];
+        }
+        else if (widgets.Select(widget => widget.Id).Distinct(StringComparer.Ordinal).Count() != widgets.Count)
+        {
+            errors[nameof(widgets)] = ["Dashboard widget identifiers must be unique."];
+        }
+        return errors;
+    }
+
+    private static bool HasValidDimensions(DashboardWidgetDefinition widget)
+    {
+        var minimum = MinimumDimensions[widget.Type];
+        var width = widget.Width ?? widget.Size switch
+        {
+            "sixth" => 0.5,
+            "third" => 1,
+            "half" => 2,
+            "two-thirds" => 3,
+            _ => 4
+        };
+
+        return width >= minimum.Width && width <= 4 && width * 2 % 1 == 0 &&
+               widget.Height >= minimum.Height && widget.Height <= 2 && widget.Height * 2 % 1 == 0;
+    }
+
+    public static OrganizationDashboardResponse ToDashboardResponse(this Organization organization)
+    {
+        if (string.IsNullOrWhiteSpace(organization.DashboardLayoutJson))
+        {
+            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc);
+        }
+
+        try
+        {
+            var widgets = JsonSerializer.Deserialize<DashboardWidgetDefinition[]>(
+                organization.DashboardLayoutJson) ?? [];
+            return new OrganizationDashboardResponse(widgets, organization.DashboardPublishedAtUtc);
+        }
+        catch (JsonException)
+        {
+            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc);
+        }
+    }
+}
+
+internal sealed class GetOrganizationDashboardQueryHandler(IOrganizationRepository organizationRepository)
+    : IRequestHandler<GetOrganizationDashboardQuery, Result<OrganizationDashboardResponse>>
+{
+    public async Task<Result<OrganizationDashboardResponse>> Handle(
+        GetOrganizationDashboardQuery request,
+        CancellationToken cancellationToken)
+    {
+        var organization = await organizationRepository.GetByIdAsync(
+            request.OrganizationId, cancellationToken);
+        return organization is null || !organization.HasMember(request.RequestingUserId)
+            ? Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.NotFound)
+            : Result<OrganizationDashboardResponse>.Success(organization.ToDashboardResponse());
+    }
+}
+
+internal sealed class PublishOrganizationDashboardCommandHandler(
+    IOrganizationRepository organizationRepository,
+    IUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
+    : IRequestHandler<PublishOrganizationDashboardCommand, Result<OrganizationDashboardResponse>>
+{
+    public async Task<Result<OrganizationDashboardResponse>> Handle(
+        PublishOrganizationDashboardCommand request,
+        CancellationToken cancellationToken)
+    {
+        var errors = OrganizationDashboard.Validate(request.Widgets);
+        if (errors.Count > 0)
+        {
+            return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.Invalid(errors));
+        }
+
+        var organization = await organizationRepository.GetByIdAsync(
+            request.OrganizationId, cancellationToken);
+        if (organization is null || !organization.HasMember(request.RequestingUserId))
+        {
+            return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.NotFound);
+        }
+        if (!organization.HasPermission(
+            request.RequestingUserId, OrganizationPermissions.ManageOrganization))
+        {
+            return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.PermissionRequired);
+        }
+
+        organization.PublishDashboard(
+            JsonSerializer.Serialize(request.Widgets), timeProvider.GetUtcNow());
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return Result<OrganizationDashboardResponse>.Success(organization.ToDashboardResponse());
     }
 }
 

@@ -23,6 +23,8 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
         builder.Property(organization => organization.NormalizedName).HasMaxLength(150).IsRequired();
         builder.HasIndex(organization => organization.NormalizedName).IsUnique();
         builder.Property(organization => organization.Description).HasMaxLength(1000);
+        builder.Property(organization => organization.DashboardLayoutJson);
+        builder.Property(organization => organization.DashboardPublishedAtUtc);
         builder.Property(organization => organization.CreatedAtUtc).IsRequired();
         builder.Property(organization => organization.UpdatedAtUtc);
 

@@ -12,9 +12,9 @@ public sealed class WorkshopHub(
 {
     public async Task<WorkshopPresence[]> JoinOrganization(
         Guid organizationId,
-        string status,
-        CancellationToken cancellationToken)
+        string status)
     {
+        var cancellationToken = Context.ConnectionAborted;
         var userId = GetAuthenticatedUserId();
         var organization = await organizationRepository.GetByIdAsync(
             organizationId,
@@ -43,9 +43,9 @@ public sealed class WorkshopHub(
 
     public async Task SetStatus(
         Guid organizationId,
-        string status,
-        CancellationToken cancellationToken)
+        string status)
     {
+        var cancellationToken = Context.ConnectionAborted;
         var userId = GetAuthenticatedUserId();
         var organization = await organizationRepository.GetByIdAsync(
             organizationId,
@@ -84,6 +84,6 @@ public sealed class WorkshopHub(
             : throw new HubException("The authenticated user is invalid.");
     }
 
-    private static string GetGroupName(Guid organizationId) =>
+    public static string GetGroupName(Guid organizationId) =>
         $"workshop:{organizationId:N}";
 }
