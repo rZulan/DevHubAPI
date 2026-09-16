@@ -5,6 +5,10 @@ namespace DevHub.Application.Abstractions.Persistence;
 
 public interface IOrganizationRepository
 {
+    Task<Organization?> GetDashboardForMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
+    Task<Organization?> GetMembershipForUserAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
+    Task<bool> IsMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<DevHub.Application.Organizations.OrganizationResponse>> ListSummariesForUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<Organization?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Organization>> ListForUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<User>> ListMembersAsync(Guid organizationId, CancellationToken cancellationToken = default);

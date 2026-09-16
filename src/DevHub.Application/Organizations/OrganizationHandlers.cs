@@ -108,10 +108,9 @@ internal static class OrganizationMappings
 
     public static OrganizationMemberResponse ToMemberResponse(
         this User user,
-        Organization organization)
+        OrganizationMember member)
     {
         var response = user.ToUserResponse();
-        var member = organization.Members.Single(candidate => candidate.UserId == user.Id);
         return new OrganizationMemberResponse(
             response.Id,
             response.Email,
@@ -334,11 +333,11 @@ internal sealed class ListOrganizationsQueryHandler(IOrganizationRepository orga
         ListOrganizationsQuery request,
         CancellationToken cancellationToken)
     {
-        var organizations = await organizationRepository.ListForUserAsync(
+        var organizations = await organizationRepository.ListSummariesForUserAsync(
             request.RequestingUserId,
             cancellationToken);
         return Result<IReadOnlyList<OrganizationResponse>>.Success(
-            organizations.Select(organization => organization.ToResponse()).ToArray());
+            organizations);
     }
 }
 
@@ -365,10 +364,10 @@ internal sealed class ListOrganizationMembersQueryHandler(IOrganizationRepositor
         ListOrganizationMembersQuery request,
         CancellationToken cancellationToken)
     {
-        var organization = await organizationRepository.GetByIdAsync(
-            request.OrganizationId,
+        var organization = await organizationRepository.GetMembershipForUserAsync(
+            request.OrganizationId, request.RequestingUserId,
             cancellationToken);
-        if (organization is null || !organization.HasMember(request.RequestingUserId))
+        if (organization is null)
         {
             return Result<IReadOnlyList<OrganizationMemberResponse>>.Failure(OrganizationErrors.NotFound);
         }
@@ -376,8 +375,10 @@ internal sealed class ListOrganizationMembersQueryHandler(IOrganizationRepositor
         var users = await organizationRepository.ListMembersAsync(
             organization.Id,
             cancellationToken);
+        var membersById = organization.Members.ToDictionary(member => member.UserId);
         return Result<IReadOnlyList<OrganizationMemberResponse>>.Success(
-            users.Select(user => user.ToMemberResponse(organization)).ToArray());
+            users.Where(user => membersById.ContainsKey(user.Id))
+                .Select(user => user.ToMemberResponse(membersById[user.Id])).ToArray());
     }
 }
 
@@ -578,9 +579,9 @@ internal sealed class GetOrganizationDashboardQueryHandler(IOrganizationReposito
         GetOrganizationDashboardQuery request,
         CancellationToken cancellationToken)
     {
-        var organization = await organizationRepository.GetByIdAsync(
-            request.OrganizationId, cancellationToken);
-        return organization is null || !organization.HasMember(request.RequestingUserId)
+        var organization = await organizationRepository.GetDashboardForMemberAsync(
+            request.OrganizationId, request.RequestingUserId, cancellationToken);
+        return organization is null
             ? Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.NotFound)
             : Result<OrganizationDashboardResponse>.Success(organization.ToDashboardResponse());
     }

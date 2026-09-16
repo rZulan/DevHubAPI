@@ -2,6 +2,7 @@ using DevHub.Api.Realtime;
 using DevHub.Application.Abstractions.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace DevHub.Api.Controllers;
 
@@ -10,7 +11,8 @@ namespace DevHub.Api.Controllers;
 [Authorize]
 public sealed class WorkshopPresenceController(
     IOrganizationRepository organizationRepository,
-    WorkshopPresenceTracker presenceTracker) : ApiControllerBase
+    WorkshopPresenceTracker presenceTracker,
+    IHubContext<WorkshopHub> hub) : ApiControllerBase
 {
     [HttpPost]
     [EndpointName("UpdateWorkshopPresence")]
@@ -23,12 +25,13 @@ public sealed class WorkshopPresenceController(
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
 
-        var organization = await organizationRepository.GetByIdAsync(
-            organizationId,
-            cancellationToken);
-        if (organization is null || !organization.HasMember(userId)) return NotFound();
+        if (!await organizationRepository.IsMemberAsync(organizationId, userId, cancellationToken)) return NotFound();
 
-        return Ok(presenceTracker.Heartbeat(organizationId, userId, request.Status));
+        var result = presenceTracker.Heartbeat(organizationId, userId, request.Status);
+        if (result.StatusChanged)
+            await hub.Clients.Group(WorkshopHub.GetGroupName(organizationId)).SendAsync(
+                "MemberStatusChanged", userId.ToString(), result.Status, organizationId.ToString(), cancellationToken);
+        return Ok(result.Members);
     }
 }
 

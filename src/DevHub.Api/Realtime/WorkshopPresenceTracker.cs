@@ -1,161 +1,138 @@
 namespace DevHub.Api.Realtime;
 
 public sealed record WorkshopPresence(Guid UserId, string Status);
-
-public sealed record PresenceJoinResult(
-    bool IsFirstConnection,
-    IReadOnlyList<WorkshopPresence> Members);
-
-public sealed record PresenceLeaveResult(
-    Guid OrganizationId,
-    Guid UserId,
-    bool IsNowOffline);
+public sealed record PresenceJoinResult(bool StatusChanged, string Status, IReadOnlyList<WorkshopPresence> Members);
+public sealed record PresenceHeartbeatResult(bool StatusChanged, string Status, IReadOnlyList<WorkshopPresence> Members);
+public sealed record PresenceLeaveResult(Guid OrganizationId, Guid UserId, bool IsNowOffline);
 
 public sealed class WorkshopPresenceTracker(TimeProvider timeProvider)
 {
-    // Background browser tabs can throttle timers to roughly once per minute.
-    // Keep the fallback alive through that throttling without treating lost focus as offline.
     private static readonly TimeSpan HeartbeatLifetime = TimeSpan.FromMinutes(2);
-    private static readonly HashSet<string> AllowedStatuses =
-        ["online", "away", "dnd", "invisible"];
-    private readonly Lock _lock = new();
-    private readonly Dictionary<Guid, Dictionary<Guid, HashSet<string>>> _organizations = [];
-    private readonly Dictionary<string, (Guid OrganizationId, Guid UserId)> _connections = [];
-    private readonly Dictionary<Guid, Dictionary<Guid, DateTimeOffset>> _heartbeats = [];
-    private readonly Dictionary<Guid, Dictionary<Guid, string>> _statuses = [];
-
-    public static string NormalizeStatus(string? status) =>
-        status is not null && AllowedStatuses.Contains(status.ToLowerInvariant())
-            ? status.ToLowerInvariant()
-            : "online";
-
-    public PresenceJoinResult Join(
-        Guid organizationId,
-        Guid userId,
-        string connectionId,
-        string? status)
+    // Fixed shards bound lock overhead and let unrelated organizations progress concurrently.
+    private readonly Shard[] _shards = Enumerable.Range(0, 64).Select(_ => new Shard()).ToArray();
+    private sealed class Shard
     {
-        lock (_lock)
-        {
-            if (!_organizations.TryGetValue(organizationId, out var users))
-            {
-                users = [];
-                _organizations[organizationId] = users;
-            }
-
-            if (!users.TryGetValue(userId, out var connections))
-            {
-                connections = [];
-                users[userId] = connections;
-            }
-
-            var isFirstConnection = connections.Count == 0;
-            connections.Add(connectionId);
-            _connections[connectionId] = (organizationId, userId);
-            SetStatusCore(organizationId, userId, status);
-
-            return new PresenceJoinResult(
-                isFirstConnection,
-                GetMembers(organizationId, timeProvider.GetUtcNow()));
-        }
+        public readonly Lock Gate = new();
+        public readonly Dictionary<Guid, Dictionary<Guid, Entry>> Organizations = [];
+        public readonly Dictionary<string, Dictionary<Guid, Guid>> Connections = [];
     }
-
-    public IReadOnlyList<WorkshopPresence> Heartbeat(
-        Guid organizationId,
-        Guid userId,
-        string? status)
+    private sealed class Entry
     {
-        lock (_lock)
+        public readonly HashSet<string> Connections = [];
+        public DateTimeOffset? Heartbeat;
+        public string Status = "online";
+    }
+    private Shard GetShard(Guid id) => _shards[(uint)id.GetHashCode() % (uint)_shards.Length];
+    public static string NormalizeStatus(string? status) => status?.ToLowerInvariant() switch
+    {
+        "away" => "away", "dnd" => "dnd", "invisible" => "invisible", _ => "online"
+    };
+    private static bool IsActive(Entry entry, DateTimeOffset now) =>
+        entry.Connections.Count > 0 || entry.Heartbeat is { } lastSeen && now - lastSeen <= HeartbeatLifetime;
+    private static string PublicStatus(Entry entry, DateTimeOffset now) =>
+        IsActive(entry, now) && entry.Status != "invisible" ? entry.Status : "offline";
+    private static Entry GetEntry(Shard shard, Guid organizationId, Guid userId)
+    {
+        if (!shard.Organizations.TryGetValue(organizationId, out var users))
+            shard.Organizations[organizationId] = users = [];
+        if (!users.TryGetValue(userId, out var entry)) users[userId] = entry = new();
+        return entry;
+    }
+    private static WorkshopPresence[] GetMembers(Shard shard, Guid organizationId, DateTimeOffset now) =>
+        shard.Organizations[organizationId]
+            .Select(pair => new WorkshopPresence(pair.Key, PublicStatus(pair.Value, now)))
+            .Where(member => member.Status != "offline").ToArray();
+
+    public PresenceJoinResult Join(Guid organizationId, Guid userId, string connectionId, string? status)
+    {
+        var shard = GetShard(organizationId);
+        lock (shard.Gate)
         {
             var now = timeProvider.GetUtcNow();
-            if (!_heartbeats.TryGetValue(organizationId, out var users))
+            var entry = GetEntry(shard, organizationId, userId);
+            var previous = PublicStatus(entry, now);
+            entry.Connections.Add(connectionId);
+            entry.Heartbeat = null; // Transfer the fallback lease to the live connection.
+            entry.Status = NormalizeStatus(status);
+            if (!shard.Connections.TryGetValue(connectionId, out var organizations))
+                shard.Connections[connectionId] = organizations = [];
+            organizations[organizationId] = userId;
+            var current = PublicStatus(entry, now);
+            return new(previous != current, current, GetMembers(shard, organizationId, now));
+        }
+    }
+    public PresenceHeartbeatResult Heartbeat(Guid organizationId, Guid userId, string? status)
+    {
+        var shard = GetShard(organizationId);
+        lock (shard.Gate)
+        {
+            var now = timeProvider.GetUtcNow();
+            var entry = GetEntry(shard, organizationId, userId);
+            var previous = PublicStatus(entry, now);
+            entry.Heartbeat = now;
+            entry.Status = NormalizeStatus(status);
+            var current = PublicStatus(entry, now);
+            return new(previous != current, current, GetMembers(shard, organizationId, now));
+        }
+    }
+    public string? SetStatus(Guid organizationId, Guid userId, string connectionId, string? status)
+    {
+        var shard = GetShard(organizationId);
+        lock (shard.Gate)
+        {
+            if (!shard.Organizations.TryGetValue(organizationId, out var users) ||
+                !users.TryGetValue(userId, out var entry) || !entry.Connections.Contains(connectionId)) return null;
+            var now = timeProvider.GetUtcNow();
+            var previous = PublicStatus(entry, now);
+            entry.Status = NormalizeStatus(status);
+            var current = PublicStatus(entry, now);
+            return previous == current ? null : current;
+        }
+    }
+    public IReadOnlyList<PresenceLeaveResult> Leave(string connectionId)
+    {
+        List<PresenceLeaveResult> results = [];
+        foreach (var shard in _shards)
+        {
+            lock (shard.Gate)
             {
-                users = [];
-                _heartbeats[organizationId] = users;
-            }
-
-            users[userId] = now;
-            SetStatusCore(organizationId, userId, status);
-            return GetMembers(organizationId, now);
-        }
-    }
-
-    public string SetStatus(Guid organizationId, Guid userId, string? status)
-    {
-        lock (_lock)
-        {
-            return SetStatusCore(organizationId, userId, status);
-        }
-    }
-
-    public PresenceLeaveResult? Leave(string connectionId)
-    {
-        lock (_lock)
-        {
-            if (!_connections.Remove(connectionId, out var presence) ||
-                !_organizations.TryGetValue(presence.OrganizationId, out var users) ||
-                !users.TryGetValue(presence.UserId, out var connections))
-            {
-                return null;
-            }
-
-            connections.Remove(connectionId);
-            if (connections.Count == 0) users.Remove(presence.UserId);
-            if (users.Count == 0) _organizations.Remove(presence.OrganizationId);
-
-            var hasRecentHeartbeat = _heartbeats.TryGetValue(presence.OrganizationId, out var heartbeatUsers) &&
-                heartbeatUsers.TryGetValue(presence.UserId, out var lastSeenAtUtc) &&
-                timeProvider.GetUtcNow() - lastSeenAtUtc <= HeartbeatLifetime;
-
-            return new PresenceLeaveResult(
-                presence.OrganizationId,
-                presence.UserId,
-                connections.Count == 0 && !hasRecentHeartbeat);
-        }
-    }
-
-    private string SetStatusCore(Guid organizationId, Guid userId, string? status)
-    {
-        var normalizedStatus = NormalizeStatus(status);
-        if (!_statuses.TryGetValue(organizationId, out var users))
-        {
-            users = [];
-            _statuses[organizationId] = users;
-        }
-
-        users[userId] = normalizedStatus;
-        return normalizedStatus;
-    }
-
-    private IReadOnlyList<WorkshopPresence> GetMembers(Guid organizationId, DateTimeOffset now)
-    {
-        var activeUserIds = _organizations.TryGetValue(organizationId, out var connectedUsers)
-            ? connectedUsers.Keys.ToHashSet()
-            : [];
-
-        if (_heartbeats.TryGetValue(organizationId, out var heartbeatUsers))
-        {
-            foreach (var (userId, lastSeenAtUtc) in heartbeatUsers.ToArray())
-            {
-                if (now - lastSeenAtUtc <= HeartbeatLifetime)
+                if (!shard.Connections.Remove(connectionId, out var organizations)) continue;
+                var now = timeProvider.GetUtcNow();
+                foreach (var (organizationId, userId) in organizations)
                 {
-                    activeUserIds.Add(userId);
-                }
-                else
-                {
-                    heartbeatUsers.Remove(userId);
+                    var users = shard.Organizations[organizationId];
+                    var entry = users[userId];
+                    var wasVisible = PublicStatus(entry, now) != "offline";
+                    entry.Connections.Remove(connectionId);
+                    if (IsActive(entry, now)) continue;
+                    users.Remove(userId);
+                    if (users.Count == 0) shard.Organizations.Remove(organizationId);
+                    results.Add(new(organizationId, userId, wasVisible));
                 }
             }
-
-            if (heartbeatUsers.Count == 0) _heartbeats.Remove(organizationId);
         }
-
-        _statuses.TryGetValue(organizationId, out var statuses);
-        return activeUserIds
-            .Select(userId => new WorkshopPresence(
-                userId,
-                statuses?.GetValueOrDefault(userId) ?? "online"))
-            .Where(member => member.Status != "invisible")
-            .ToArray();
+        return results;
+    }
+    public IReadOnlyList<PresenceLeaveResult> ExpireHeartbeats()
+    {
+        List<PresenceLeaveResult> results = [];
+        var now = timeProvider.GetUtcNow();
+        foreach (var shard in _shards)
+        {
+            lock (shard.Gate)
+            {
+                foreach (var (organizationId, users) in shard.Organizations.ToArray())
+                {
+                    foreach (var (userId, entry) in users.ToArray())
+                    {
+                        if (IsActive(entry, now)) continue;
+                        users.Remove(userId);
+                        results.Add(new(organizationId, userId, entry.Status != "invisible"));
+                    }
+                    if (users.Count == 0) shard.Organizations.Remove(organizationId);
+                }
+            }
+        }
+        return results;
     }
 }
