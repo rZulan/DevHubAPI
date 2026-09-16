@@ -305,7 +305,7 @@ public static class DependencyInjection
             : "/login";
         var allowedPaths = configuration
             .GetSection("Frontend:AllowedReturnPaths")
-            .Get<string[]>() ?? ["/account/profile", "/account/account"];
+            .Get<string[]>() ?? ["/workshop", "/account/profile", "/account/account"];
 
         if (string.IsNullOrWhiteSpace(returnPath) ||
             !allowedPaths.Contains(returnPath, StringComparer.Ordinal))

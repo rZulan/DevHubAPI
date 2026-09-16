@@ -173,7 +173,7 @@ public sealed class AuthController(
     public IActionResult External(
         string provider,
         [FromQuery] string intent = "login",
-        [FromQuery] string returnUrl = "/account/profile")
+        [FromQuery] string returnUrl = "/workshop")
     {
         var scheme = GetProviderScheme(provider);
 
@@ -238,7 +238,7 @@ public sealed class AuthController(
             AuthenticationSchemes.ExternalCookie);
         var returnUrl = GetAuthenticationItem(
             externalResult.Properties,
-            ExternalAuthenticationConstants.ReturnUrlItem) ?? "/account/profile";
+            ExternalAuthenticationConstants.ReturnUrlItem) ?? "/workshop";
 
         if (!externalResult.Succeeded || externalResult.Principal is null)
         {
@@ -394,7 +394,7 @@ public sealed class AuthController(
     {
         var allowedPaths = configuration
             .GetSection("Frontend:AllowedReturnPaths")
-            .Get<string[]>() ?? ["/account/profile", "/account/account"];
+            .Get<string[]>() ?? ["/workshop", "/account/profile", "/account/account"];
 
         return returnUrl.StartsWith("/", StringComparison.Ordinal) &&
                !returnUrl.StartsWith("//", StringComparison.Ordinal) &&
@@ -412,7 +412,7 @@ public sealed class AuthController(
     {
         if (!IsAllowedReturnUrl(returnUrl))
         {
-            returnUrl = "/account/profile";
+            returnUrl = "/workshop";
         }
 
         var frontendBaseUrl = configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
