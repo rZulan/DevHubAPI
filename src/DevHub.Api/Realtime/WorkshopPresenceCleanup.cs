@@ -10,20 +10,27 @@ public sealed class WorkshopPresenceCleanup(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30));
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
-            foreach (var result in tracker.ExpireHeartbeats().Where(result => result.IsNowOffline))
+            while (await timer.WaitForNextTickAsync(stoppingToken))
             {
-                try
+                foreach (var result in tracker.ExpireHeartbeats().Where(result => result.IsNowOffline))
                 {
-                    await hub.Clients.Group(WorkshopHub.GetGroupName(result.OrganizationId)).SendAsync(
-                        "MemberOffline", result.UserId.ToString(), result.OrganizationId.ToString(), stoppingToken);
-                }
-                catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
-                {
-                    logger.LogWarning(exception, "Unable to broadcast expired workshop presence");
+                    try
+                    {
+                        await hub.Clients.Group(WorkshopHub.GetGroupName(result.OrganizationId)).SendAsync(
+                            "MemberOffline", result.UserId.ToString(), result.OrganizationId.ToString(), stoppingToken);
+                    }
+                    catch (Exception exception) when (!stoppingToken.IsCancellationRequested)
+                    {
+                        logger.LogWarning(exception, "Unable to broadcast expired workshop presence");
+                    }
                 }
             }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal host shutdown, including cleanup after another process already owns the configured port.
         }
     }
 }
