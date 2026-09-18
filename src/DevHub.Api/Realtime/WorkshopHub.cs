@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using DevHub.Application.Abstractions.Persistence;
+using DevHub.Application.Ideas;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -8,7 +9,10 @@ namespace DevHub.Api.Realtime;
 [Authorize]
 public sealed class WorkshopHub(
     IOrganizationRepository organizationRepository,
-    WorkshopPresenceTracker presenceTracker) : Hub
+    IUserRepository userRepository,
+    IIdeasService ideasService,
+    WorkshopPresenceTracker presenceTracker,
+    IdeasSelectionTracker ideasSelectionTracker) : Hub
 {
     public async Task<IReadOnlyList<WorkshopPresence>> JoinOrganization(Guid organizationId, string status)
     {
@@ -39,8 +43,39 @@ public sealed class WorkshopHub(
                 userId.ToString(), changedStatus, organizationId.ToString(), cancellationToken);
     }
 
+    public async Task<IReadOnlyList<IdeasSelection>> JoinIdeas(Guid organizationId, Guid projectId)
+    {
+        var cancellationToken = Context.ConnectionAborted;
+        var userId = GetAuthenticatedUserId();
+        var ideas = await ideasService.Get(organizationId, projectId, userId, cancellationToken);
+        if (!ideas.IsSuccess) throw new HubException("You cannot access this Ideas canvas.");
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken)
+            ?? throw new HubException("The authenticated user no longer exists.");
+        var groupName = GetIdeasGroupName(organizationId, projectId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName, cancellationToken);
+        Context.Items["ideas-group"] = groupName;
+        Context.Items["ideas-project"] = projectId.ToString();
+        return ideasSelectionTracker.Join(organizationId, projectId, userId, Context.ConnectionId, user.Username);
+    }
+
+    public async Task SetIdeasSelection(IReadOnlyList<string>? shapeIds)
+    {
+        var selection = ideasSelectionTracker.Update(Context.ConnectionId,
+            (shapeIds ?? []).Where(id => !string.IsNullOrWhiteSpace(id) && id.Length <= 128).ToArray());
+        if (selection is null || !Context.Items.TryGetValue("ideas-group", out var value) || value is not string groupName)
+            throw new HubException("Join the Ideas canvas before publishing a selection.");
+        if (!Context.Items.TryGetValue("ideas-project", out var projectValue) || projectValue is not string projectId)
+            throw new HubException("The Ideas session is invalid.");
+        await Clients.OthersInGroup(groupName).SendAsync("IdeasSelectionChanged", projectId,
+            selection.UserId.ToString(), selection.Username, selection.ShapeIds, Context.ConnectionAborted);
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
+        if (ideasSelectionTracker.Leave(Context.ConnectionId) is { } selection)
+            await Clients.Group(GetIdeasGroupName(selection.OrganizationId, selection.ProjectId)).SendAsync(
+                "IdeasSelectionChanged", selection.ProjectId.ToString(), selection.Selection.UserId.ToString(),
+                selection.Selection.Username, selection.Selection.ShapeIds);
         foreach (var result in presenceTracker.Leave(Context.ConnectionId).Where(result => result.IsNowOffline))
             await Clients.Group(GetGroupName(result.OrganizationId)).SendAsync(
                 "MemberOffline", result.UserId.ToString(), result.OrganizationId.ToString());
@@ -54,4 +89,5 @@ public sealed class WorkshopHub(
             : throw new HubException("The authenticated user is invalid.");
     }
     public static string GetGroupName(Guid organizationId) => $"workshop:{organizationId:N}";
+    public static string GetIdeasGroupName(Guid organizationId, Guid projectId) => $"ideas:{organizationId:N}:{projectId:N}";
 }

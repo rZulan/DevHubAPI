@@ -30,6 +30,7 @@ builder.Services.AddSignalR(options =>
     options.EnableDetailedErrors = builder.Environment.IsDevelopment());
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ChatUserIdProvider>();
 builder.Services.AddSingleton<WorkshopPresenceTracker>();
+builder.Services.AddSingleton<IdeasSelectionTracker>();
 builder.Services.AddHostedService<WorkshopPresenceCleanup>();
 
 builder.Services.AddOpenApi(options =>

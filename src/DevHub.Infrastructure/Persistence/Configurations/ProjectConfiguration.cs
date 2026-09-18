@@ -11,6 +11,8 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
     {
         builder.ToTable("Projects");
         builder.HasKey(project => project.Id);
+        builder.Property(project => project.IdeasJson).HasColumnType("nvarchar(max)").HasDefaultValue("[]").IsRequired();
+        builder.Property(project => project.IdeasRevision).HasDefaultValue(0);
 
         builder.Property(project => project.Name).HasMaxLength(150).IsRequired();
         builder.Property(project => project.NormalizedName).HasMaxLength(150).IsRequired();

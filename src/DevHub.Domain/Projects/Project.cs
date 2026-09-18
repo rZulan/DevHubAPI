@@ -62,6 +62,8 @@ public sealed class Project : BaseEntity
     }
 
     public Guid OrganizationId { get; private set; }
+    public string IdeasJson { get; private set; } = "[]";
+    public int IdeasRevision { get; private set; }
     public Guid TeamId { get; private set; }
     public Guid LeadUserId { get; private set; }
     public string Name { get; private set; } = string.Empty;
