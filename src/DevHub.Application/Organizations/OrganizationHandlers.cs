@@ -122,7 +122,8 @@ internal static class OrganizationMappings
             response.AvatarUrl,
             response.ConnectedAccounts,
             member.IsOwner,
-            member.RoleAssignments.Select(assignment => assignment.RoleId).ToArray());
+            member.RoleAssignments.Select(assignment => assignment.RoleId).ToArray(),
+            member.JoinedAtUtc);
     }
 }
 

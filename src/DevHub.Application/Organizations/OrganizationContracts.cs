@@ -36,7 +36,8 @@ public sealed record OrganizationMemberResponse(
     string? AvatarUrl,
     IReadOnlyCollection<ConnectedAccountResponse> ConnectedAccounts,
     bool IsOwner,
-    IReadOnlyList<Guid> RoleIds);
+    IReadOnlyList<Guid> RoleIds,
+    DateTimeOffset JoinedAtUtc);
 
 public sealed record CreateOrganizationCommand(
     Guid RequestingUserId,
