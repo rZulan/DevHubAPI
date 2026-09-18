@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<DevHub.Application.Ideas.IIdeasService, DevHub.Infrastructure.Ideas.IdeasService>();
+        services.AddScoped<DevHub.Application.Appearance.IMemberAppearanceService, DevHub.Infrastructure.Appearance.MemberAppearanceService>();
         services.AddScoped<DevHub.Application.Todos.ITodoService, DevHub.Infrastructure.Todos.TodoService>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());

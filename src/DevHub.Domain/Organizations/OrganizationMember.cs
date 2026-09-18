@@ -26,6 +26,8 @@ public sealed class OrganizationMember
     public Guid UserId { get; private set; }
     public DateTimeOffset JoinedAtUtc { get; private set; }
     public bool IsOwner { get; private set; }
+    /// <summary>The workshop color scheme this member chose for themselves.</summary>
+    public string ColorSchemeId { get; private set; } = OrganizationColorScheme.DefaultId;
     public IReadOnlyCollection<OrganizationMemberRole> RoleAssignments => _roleAssignments;
     public Organization Organization { get; private set; } = null!;
     public User User { get; private set; } = null!;

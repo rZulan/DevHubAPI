@@ -28,6 +28,8 @@ public sealed class ApplicationDbContext(
 
     public DbSet<OrganizationMemberRole> OrganizationMemberRoles => Set<OrganizationMemberRole>();
 
+    public DbSet<OrganizationColorScheme> OrganizationColorSchemes => Set<OrganizationColorScheme>();
+
     public DbSet<Team> Teams => Set<Team>();
 
     public DbSet<Project> Projects => Set<Project>();

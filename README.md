@@ -91,6 +91,16 @@ In development, Scalar is available at `http://localhost:5288/scalar/v1`.
   details, updates, and deletion. Organization owners see every project; other members
   only see projects owned by their teams. Owners and the owning team leader can manage
   a project.
+- `GET /api/organizations/{organizationId}/appearance` - the current member's workshop color
+  scheme, the built-in presets, and that member's custom schemes.
+- `PUT /api/organizations/{organizationId}/appearance/active` - chooses the member's scheme.
+- `POST|PUT|DELETE /api/organizations/{organizationId}/appearance/schemes/{schemeId?}` -
+  custom color scheme CRUD. Deleting the scheme in use returns the member to the default.
+
+Color schemes are personal: any member can choose or create them, nobody else can see them,
+and they are removed when the member leaves the organization. Smoke-test the rules against
+the local database (writes are rolled back) with
+`dotnet run --project tests/DevHub.AppearanceSmoke -c Release`.
 
 Registration, login, external login, and token refresh issue an authentication cookie
 plus a separate rotating HTTP-only refresh-token cookie. Refresh tokens are no longer
