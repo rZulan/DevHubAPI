@@ -9,6 +9,20 @@ namespace DevHub.Api.Controllers;
 [Route("api/organizations/{organizationId:guid}/projects/{projectId:guid}/todos")]
 public sealed class TodosController(ITodoService todos) : ApiControllerBase
 {
+    [HttpPatch("{todoId:guid}/columns")]
+    public async Task<IActionResult> ConfigureColumns(Guid organizationId, Guid projectId, Guid todoId, ConfigureTodoColumnsRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.ConfigureColumns(organizationId, projectId, todoId, userId, request, ct);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+    [HttpPatch("{todoId:guid}/tasks/{taskId:guid}/assignees")]
+    public async Task<IActionResult> ChangeAssignee(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, ChangeTodoTaskAssigneeRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.ChangeAssignee(organizationId, projectId, todoId, taskId, userId, request, ct);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
     [HttpGet("pages")]
     public async Task<IActionResult> ListPage(Guid organizationId, Guid projectId, [FromQuery] int page, CancellationToken ct, [FromQuery] int pageSize = 12)
     {
@@ -49,6 +63,13 @@ public sealed class TodosController(ITodoService todos) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.MoveTask(organizationId, projectId, todoId, taskId, userId, request, ct);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+    [HttpPatch("{todoId:guid}/tasks/{taskId:guid}/assignee")]
+    public async Task<IActionResult> AssignTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, AssignTodoTaskRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.AssignTask(organizationId, projectId, todoId, taskId, userId, request, ct);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 }
