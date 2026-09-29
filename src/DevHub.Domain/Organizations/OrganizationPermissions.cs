@@ -6,6 +6,7 @@ public static class OrganizationPermissions
     public const string ManageOrganization = "Manage organization";
     public const string ManageRoles = "Manage roles";
     public const string ManageMembers = "Manage members";
+    public const string ChangeNicknames = "Change nicknames";
     public const string CreateInvites = "Create invites";
     public const string ManageTeams = "Manage teams";
     public const string ViewAllProjects = "View all projects";
@@ -19,6 +20,7 @@ public static class OrganizationPermissions
         ManageOrganization,
         ManageRoles,
         ManageMembers,
+        ChangeNicknames,
         CreateInvites,
         ManageTeams,
         ViewAllProjects,

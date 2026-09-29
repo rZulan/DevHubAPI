@@ -12,6 +12,7 @@ internal sealed class OrganizationMemberConfiguration : IEntityTypeConfiguration
         builder.HasKey(member => new { member.OrganizationId, member.UserId });
         builder.Property(member => member.JoinedAtUtc).IsRequired();
         builder.Property(member => member.IsOwner).IsRequired();
+        builder.Property(member => member.Nickname).HasMaxLength(80);
         builder.Property(member => member.ColorSchemeId)
             .HasMaxLength(64)
             .HasDefaultValue(OrganizationColorScheme.DefaultId)

@@ -4,8 +4,15 @@ using DevHub.Application;
 using DevHub.Infrastructure;
 using DevHub.Api.Realtime;
 using Scalar.AspNetCore;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // Trust the default loopback proxies only (the local Nginx server).
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
 
 builder.Services
     .AddControllers()
@@ -31,6 +38,8 @@ builder.Services.AddSignalR(options =>
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ChatUserIdProvider>();
 builder.Services.AddSingleton<WorkshopPresenceTracker>();
 builder.Services.AddSingleton<IdeasSelectionTracker>();
+builder.Services.AddSingleton<WorkshopSubscriptions>();
+builder.Services.AddScoped<WorkshopRealtime>();
 builder.Services.AddHostedService<WorkshopPresenceCleanup>();
 
 builder.Services.AddOpenApi(options =>
@@ -58,6 +67,8 @@ builder.Services
     .AddInfrastructure(builder.Configuration);
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 app.UseExceptionHandler();
 app.UseStatusCodePages(async context =>

@@ -8,6 +8,22 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using DevHub.Api.Realtime;
 
+await MembershipNotifications.Run();
+await SubscriptionRevocation.Run();
+var removalTracker = new WorkshopPresenceTracker(TimeProvider.System);
+var removalOrg = Guid.NewGuid();
+var retainedOrg = Guid.NewGuid();
+var removedUser = Guid.NewGuid();
+removalTracker.Join(removalOrg, removedUser, "removed-tab", "online");
+removalTracker.Join(retainedOrg, removedUser, "removed-tab", "online");
+removalTracker.Heartbeat(removalOrg, removedUser, "online");
+if (!removalTracker.RemoveMember(removalOrg, removedUser) || removalTracker.RemoveMember(removalOrg, removedUser))
+    throw new Exception("Revoked presence was not removed idempotently");
+if (removalTracker.Join(removalOrg, Guid.NewGuid(), "observer", "online").Members.Any(m => m.UserId == removedUser))
+    throw new Exception("Revoked member remained in a presence snapshot");
+if (removalTracker.Leave("removed-tab").Single().OrganizationId != retainedOrg)
+    throw new Exception("Removing organization membership damaged another organization's presence");
+Console.WriteLine("PASS membership removal clears live and fallback presence without corrupting other memberships");
 var clock = new TestClock();
 var tracker = new WorkshopPresenceTracker(clock);
 var orgA = Guid.NewGuid();

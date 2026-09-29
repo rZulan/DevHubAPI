@@ -13,7 +13,8 @@ public sealed record TeamResponse(
     string? Description,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
-    int MemberCount);
+    int MemberCount,
+    IReadOnlyList<Guid> MemberIds);
 
 public sealed record CreateTeamCommand(
     Guid OrganizationId,

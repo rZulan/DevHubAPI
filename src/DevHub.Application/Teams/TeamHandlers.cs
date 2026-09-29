@@ -57,7 +57,8 @@ internal static class TeamMappings
         team.Description,
         team.CreatedAtUtc,
         team.UpdatedAtUtc,
-        team.Members.Count);
+        team.Members.Count,
+        team.Members.Select(member => member.UserId).ToArray());
 }
 
 internal sealed class CreateTeamCommandHandler(

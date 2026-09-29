@@ -9,7 +9,7 @@ namespace DevHub.Api.Controllers;
 [Authorize]
 [Tags("Ideas")]
 [Route("api/organizations/{organizationId:guid}/projects/{projectId:guid}/ideas")]
-public sealed class IdeasController(IIdeasService ideas, IHubContext<WorkshopHub> hub) : ApiControllerBase
+public sealed class IdeasController(IIdeasService ideas, IHubContext<WorkshopHub> hub, WorkshopRealtime realtime) : ApiControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Get(Guid organizationId, Guid projectId, CancellationToken ct)
@@ -26,6 +26,7 @@ public sealed class IdeasController(IIdeasService ideas, IHubContext<WorkshopHub
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await ideas.Save(organizationId, projectId, userId, request, ct);
         if (!result.IsSuccess) return Failure(result.Error!);
+        await realtime.Revalidate(organizationId, projectId);
         await hub.Clients.Group(WorkshopHub.GetIdeasGroupName(organizationId, projectId)).SendAsync(
             "IdeasDocumentChanged", projectId.ToString(), result.Value, userId.ToString(), ct);
         return Ok(result.Value);

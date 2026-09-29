@@ -169,6 +169,14 @@ public sealed class Organization : BaseEntity
         return member.RemoveRole(roleId);
     }
 
+    public bool ChangeNickname(Guid userId, string? nickname)
+    {
+        var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
+        if (member is null) return false;
+        member.ChangeNickname(nickname);
+        return true;
+    }
+
     public bool PromoteOwner(Guid userId, DateTimeOffset assignedAtUtc)
     {
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);

@@ -1,3 +1,6 @@
+using DevHub.Api.Realtime;
+using DevHub.Application.Abstractions.Persistence;
+using Microsoft.AspNetCore.SignalR;
 using System.IdentityModel.Tokens.Jwt;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -20,7 +23,9 @@ namespace DevHub.Api.Controllers;
 [Authorize]
 public sealed class UsersController(
     ISender sender,
-    IConfiguration configuration) : ApiControllerBase
+    IConfiguration configuration,
+    IOrganizationRepository organizations,
+    IHubContext<WorkshopHub> workshopHub) : ApiControllerBase
 {
     /// <summary>
     /// Profile
@@ -81,6 +86,14 @@ public sealed class UsersController(
                 request.LastName,
                 request.DateOfBirth),
             cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            foreach (var organization in await organizations.ListSummariesForUserAsync(userId.Value))
+                await workshopHub.Clients.Group(WorkshopHub.GetGroupName(organization.Id)).SendAsync(
+                    "OrganizationMembersChanged", organization.Id.ToString());
+            await workshopHub.Clients.User(userId.Value.ToString()).SendAsync("UserProfileChanged");
+        }
 
         return result.IsSuccess
             ? Ok(result.Value)

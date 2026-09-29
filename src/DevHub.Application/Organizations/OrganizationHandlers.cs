@@ -102,7 +102,9 @@ internal static class OrganizationMappings
         role.Position,
         role.IsOwnerRole,
         role.IsDefaultRole,
-        role.Permissions,
+        role.IsOwnerRole || role.Permissions.Contains(OrganizationPermissions.Administrator)
+            ? OrganizationPermissions.All
+            : role.Permissions,
         organization.Members.Count(member =>
             member.RoleAssignments.Any(assignment => assignment.RoleId == role.Id)));
 
@@ -123,7 +125,8 @@ internal static class OrganizationMappings
             response.ConnectedAccounts,
             member.IsOwner,
             member.RoleAssignments.Select(assignment => assignment.RoleId).ToArray(),
-            member.JoinedAtUtc);
+            member.JoinedAtUtc,
+            member.Nickname);
     }
 }
 
@@ -323,6 +326,27 @@ internal sealed class RemoveOrganizationMemberCommandHandler(
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
+        return Result<Unit>.Success(Unit.Value);
+    }
+}
+
+internal sealed class ChangeOrganizationMemberNicknameCommandHandler(
+    IOrganizationRepository organizationRepository,
+    IUnitOfWork unitOfWork)
+    : IRequestHandler<ChangeOrganizationMemberNicknameCommand, Result<Unit>>
+{
+    public async Task<Result<Unit>> Handle(ChangeOrganizationMemberNicknameCommand request, CancellationToken cancellationToken)
+    {
+        var organization = await organizationRepository.GetByIdAsync(request.OrganizationId, cancellationToken);
+        if (organization is null || !organization.HasMember(request.RequestingUserId))
+            return Result<Unit>.Failure(OrganizationErrors.NotFound);
+        if (!organization.HasPermission(request.RequestingUserId, OrganizationPermissions.ChangeNicknames))
+            return Result<Unit>.Failure(OrganizationErrors.PermissionRequired);
+        if (!organization.HasMember(request.UserId))
+            return Result<Unit>.Failure(OrganizationErrors.NotFound);
+
+        organization.ChangeNickname(request.UserId, request.Nickname);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<Unit>.Success(Unit.Value);
     }
 }
@@ -549,7 +573,9 @@ internal static class OrganizationDashboard
             _ => 4
         };
 
-        return width >= minimum.Width && width <= 4 && width * 2 % 1 == 0 &&
+        return (widget.Column is null && widget.Row is null ||
+                widget.Column is >= 0 and < 8 && widget.Row is >= 0 and <= 120 && widget.Column + width * 2 <= 8) &&
+               width >= minimum.Width && width <= 4 && width * 2 % 1 == 0 &&
                widget.Height >= minimum.Height && widget.Height <= 2 && widget.Height * 2 % 1 == 0;
     }
 

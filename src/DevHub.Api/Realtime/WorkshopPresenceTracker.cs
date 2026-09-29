@@ -89,6 +89,23 @@ public sealed class WorkshopPresenceTracker(TimeProvider timeProvider)
             return previous == current ? null : current;
         }
     }
+    public bool RemoveMember(Guid organizationId, Guid userId)
+    {
+        var shard = GetShard(organizationId);
+        lock (shard.Gate)
+        {
+            if (!shard.Organizations.TryGetValue(organizationId, out var users) || !users.Remove(userId, out var entry)) return false;
+            foreach (var connectionId in entry.Connections)
+            {
+                if (!shard.Connections.TryGetValue(connectionId, out var organizations)) continue;
+                organizations.Remove(organizationId);
+                if (organizations.Count == 0) shard.Connections.Remove(connectionId);
+            }
+            if (users.Count == 0) shard.Organizations.Remove(organizationId);
+            return PublicStatus(entry, timeProvider.GetUtcNow()) != "offline";
+        }
+    }
+
     public IReadOnlyList<PresenceLeaveResult> Leave(string connectionId)
     {
         List<PresenceLeaveResult> results = [];

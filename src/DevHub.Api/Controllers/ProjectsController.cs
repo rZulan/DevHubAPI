@@ -1,3 +1,4 @@
+using DevHub.Api.Realtime;
 using System.ComponentModel.DataAnnotations;
 using DevHub.Application.Projects;
 using MediatR;
@@ -27,7 +28,7 @@ public sealed record SaveProjectRequest(
 [Tags("Projects")]
 [Route("api/organizations/{organizationId:guid}/projects")]
 [Authorize]
-public sealed class ProjectsController(ISender sender) : ApiControllerBase
+public sealed class ProjectsController(ISender sender, WorkshopRealtime realtime) : ApiControllerBase
 {
     [HttpGet]
     [EndpointName("ListProjects")]
@@ -76,6 +77,7 @@ public sealed class ProjectsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             CreateCommand(organizationId, userId, request),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess
             ? CreatedAtAction(
                 nameof(Get),
@@ -101,6 +103,7 @@ public sealed class ProjectsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             UpdateCommand(organizationId, projectId, userId, request),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 
@@ -118,6 +121,7 @@ public sealed class ProjectsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             new DeleteProjectCommand(organizationId, projectId, userId),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 

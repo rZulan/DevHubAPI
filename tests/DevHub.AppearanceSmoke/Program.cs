@@ -1,6 +1,8 @@
 using System.Reflection;
 using DevHub.Application.Appearance;
+using DevHub.Application;
 using DevHub.Application.Common;
+using DevHub.Application.Organizations;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Users;
 using DevHub.Infrastructure;
@@ -8,6 +10,7 @@ using DevHub.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using MediatR;
 
 // Run from api/: dotnet run --project tests/DevHub.AppearanceSmoke -c Release
 // Real database writes are isolated in a transaction and always rolled back.
@@ -16,11 +19,16 @@ var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src
     .AddUserSecrets(Assembly.Load("DevHub.Api"), optional: true).AddEnvironmentVariables().Build();
 var services = new ServiceCollection();
 services.AddLogging();
+services.AddApplication();
 services.AddInfrastructure(configuration);
+services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(
+    configuration.GetConnectionString("DefaultConnection"),
+    sql => sql.ExecutionStrategy(dependencies => new Microsoft.EntityFrameworkCore.Storage.NonRetryingExecutionStrategy(dependencies))));
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var service = scope.ServiceProvider.GetRequiredService<IMemberAppearanceService>();
+var sender = scope.ServiceProvider.GetRequiredService<ISender>();
 await using var transaction = await db.Database.BeginTransactionAsync();
 try
 {
@@ -34,6 +42,15 @@ try
     db.Users.Add(member);
     organization.AddMember(member.Id, DateTimeOffset.UtcNow);
     await db.SaveChangesAsync(ct);
+    var deniedNickname = await sender.Send(new ChangeOrganizationMemberNicknameCommand(org, owner, member.Id, "Nope"), ct);
+    Check(!deniedNickname.IsSuccess && deniedNickname.Error?.Type == ErrorType.Forbidden, "Members without Change nicknames permission cannot rename others");
+    Require(await sender.Send(new ChangeOrganizationMemberNicknameCommand(org, member.Id, owner, "Workshop Alias"), ct));
+    db.ChangeTracker.Clear();
+    var nicknamedOrganization = await db.Organizations.Include(candidate => candidate.Members).SingleAsync(candidate => candidate.Id == org, ct);
+    Check(nicknamedOrganization.Members.Single(candidate => candidate.UserId == member.Id).Nickname == "Workshop Alias", "Authorized nickname persists per organization");
+    Require(await sender.Send(new ChangeOrganizationMemberNicknameCommand(org, member.Id, owner, "  "), ct));
+    db.ChangeTracker.Clear();
+    Check((await db.Organizations.Include(candidate => candidate.Members).SingleAsync(candidate => candidate.Id == org, ct)).Members.Single(candidate => candidate.UserId == member.Id).Nickname is null, "Blank nickname restores the profile name");
     await db.Set<OrganizationMember>().Where(candidate => candidate.OrganizationId == org && candidate.UserId == owner)
         .ExecuteUpdateAsync(update => update.SetProperty(candidate => candidate.ColorSchemeId, OrganizationColorScheme.DefaultId), ct);
     db.ChangeTracker.Clear();

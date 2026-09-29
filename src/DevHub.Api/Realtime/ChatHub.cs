@@ -26,7 +26,7 @@ public sealed class ChatHub(IChatService chatService) : Hub
 
         var delivery = result.Value!;
         await Clients.Users(delivery.RecipientUserIds.Select(id => id.ToString()))
-            .SendAsync("MessageReceived", delivery.Message, cancellationToken);
+            .SendAsync("MessageReceived", delivery.Message, organizationId.ToString(), cancellationToken);
         return delivery.Message;
     }
 

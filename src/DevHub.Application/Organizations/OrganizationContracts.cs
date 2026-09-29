@@ -37,7 +37,8 @@ public sealed record OrganizationMemberResponse(
     IReadOnlyCollection<ConnectedAccountResponse> ConnectedAccounts,
     bool IsOwner,
     IReadOnlyList<Guid> RoleIds,
-    DateTimeOffset JoinedAtUtc);
+    DateTimeOffset JoinedAtUtc,
+    string? Nickname);
 
 public sealed record CreateOrganizationCommand(
     Guid RequestingUserId,
@@ -64,6 +65,12 @@ public sealed record RemoveOrganizationMemberCommand(
     Guid OrganizationId,
     Guid UserId,
     Guid RequestingUserId) : IRequest<Result<Unit>>;
+
+public sealed record ChangeOrganizationMemberNicknameCommand(
+    Guid OrganizationId,
+    Guid UserId,
+    Guid RequestingUserId,
+    [property: StringLength(80)] string? Nickname) : IRequest<Result<Unit>>;
 
 public sealed record ListOrganizationsQuery(Guid RequestingUserId)
     : IRequest<Result<IReadOnlyList<OrganizationResponse>>>;
@@ -136,7 +143,9 @@ public sealed record DashboardWidgetDefinition(
     string? Content,
     double Height = 1,
     double? Width = null,
-    string? SectionId = null);
+    string? SectionId = null,
+    int? Column = null,
+    int? Row = null);
 
 public sealed record OrganizationDashboardResponse(
     IReadOnlyList<DashboardWidgetDefinition> Widgets,

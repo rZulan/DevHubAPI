@@ -22,13 +22,16 @@ public sealed record SaveOrganizationRoleRequest(
 public sealed record SaveOrganizationDashboardRequest(
     [Required] IReadOnlyList<DashboardWidgetDefinition> Widgets);
 
+public sealed record ChangeOrganizationMemberNicknameRequest([StringLength(80)] string? Nickname);
+
 /// <summary>Creates and manages organizations and organization membership.</summary>
 [Tags("Organizations")]
 [Route("api/organizations")]
 [Authorize]
 public sealed class OrganizationsController(
     ISender sender,
-    IHubContext<WorkshopHub> workshopHub) : ApiControllerBase
+    IHubContext<WorkshopHub> workshopHub,
+    WorkshopRealtime realtime) : ApiControllerBase
 {
     [HttpGet]
     [EndpointName("ListOrganizations")]
@@ -66,6 +69,9 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new CreateOrganizationCommand(userId, request.Name, request.Description),
             cancellationToken);
+        if (result.IsSuccess)
+            await workshopHub.Clients.User(userId.ToString()).SendAsync(
+                "OrganizationMembershipChanged", result.Value!.Id.ToString());
         return result.IsSuccess
             ? CreatedAtAction(nameof(Get), new { organizationId = result.Value!.Id }, result.Value)
             : Failure(result.Error!);
@@ -90,6 +96,7 @@ public sealed class OrganizationsController(
                 request.Name,
                 request.Description),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 
@@ -103,7 +110,11 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new DeleteOrganizationCommand(organizationId, userId),
             cancellationToken);
-        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await workshopHub.Clients.Group(WorkshopHub.GetGroupName(organizationId)).SendAsync(
+            "OrganizationAccessRevoked", organizationId.ToString());
+        await realtime.Revalidate(organizationId);
+        return NoContent();
     }
 
     [HttpGet("{organizationId:guid}/members")]
@@ -134,7 +145,9 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new AddOrganizationMemberCommand(organizationId, memberUserId, userId),
             cancellationToken);
-        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await NotifyMembershipChanged(organizationId, memberUserId);
+        return NoContent();
     }
 
     [HttpDelete("{organizationId:guid}/members/{memberUserId:guid}")]
@@ -150,6 +163,26 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new RemoveOrganizationMemberCommand(organizationId, memberUserId, userId),
             cancellationToken);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await workshopHub.Clients.User(memberUserId.ToString()).SendAsync(
+            "OrganizationAccessRevoked", organizationId.ToString());
+        await realtime.RevokeMember(organizationId, memberUserId);
+        await NotifyMembershipChanged(organizationId, memberUserId);
+        return NoContent();
+    }
+
+    [HttpPatch("{organizationId:guid}/members/{memberUserId:guid}/nickname")]
+    [EndpointName("ChangeOrganizationMemberNickname")]
+    public async Task<IActionResult> ChangeMemberNickname(
+        Guid organizationId,
+        Guid memberUserId,
+        [FromBody] ChangeOrganizationMemberNicknameRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new ChangeOrganizationMemberNicknameCommand(
+            organizationId, memberUserId, userId, request.Nickname), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -178,7 +211,9 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new AcceptOrganizationInviteCommand(token, userId),
             cancellationToken);
-        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await NotifyMembershipChanged(result.Value!.Id, userId);
+        return Ok(result.Value);
     }
 
     [HttpGet("{organizationId:guid}/dashboard")]
@@ -236,6 +271,7 @@ public sealed class OrganizationsController(
         var result = await sender.Send(new CreateOrganizationRoleCommand(
             organizationId, userId, request.Name, request.Color, request.Permissions),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess
             ? StatusCode(StatusCodes.Status201Created, result.Value)
             : Failure(result.Error!);
@@ -253,6 +289,7 @@ public sealed class OrganizationsController(
         var result = await sender.Send(new UpdateOrganizationRoleCommand(
             organizationId, roleId, userId, request.Name, request.Color,
             request.Position, request.Permissions), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 
@@ -267,6 +304,7 @@ public sealed class OrganizationsController(
         var result = await sender.Send(
             new DeleteOrganizationRoleCommand(organizationId, roleId, userId),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -281,6 +319,7 @@ public sealed class OrganizationsController(
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(new AssignOrganizationRoleCommand(
             organizationId, roleId, memberUserId, userId), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -295,6 +334,7 @@ public sealed class OrganizationsController(
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(new RemoveOrganizationRoleCommand(
             organizationId, roleId, memberUserId, userId), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -308,6 +348,7 @@ public sealed class OrganizationsController(
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(new PromoteOrganizationOwnerCommand(
             organizationId, memberUserId, userId), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -320,6 +361,21 @@ public sealed class OrganizationsController(
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(
             new LeaveOrganizationCommand(organizationId, userId), cancellationToken);
-        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await workshopHub.Clients.User(userId.ToString()).SendAsync(
+            "OrganizationAccessRevoked", organizationId.ToString());
+        await realtime.RevokeMember(organizationId, userId);
+        await NotifyMembershipChanged(organizationId, userId);
+        return NoContent();
+    }
+
+    private async Task NotifyMembershipChanged(Guid organizationId, Guid memberUserId)
+    {
+        // The write is already committed: a closing request must not cancel the notification.
+        await workshopHub.Clients.Group(WorkshopHub.GetGroupName(organizationId)).SendAsync(
+            "OrganizationMembersChanged", organizationId.ToString());
+        // Also refresh the affected user's other tabs, including tabs outside this organization.
+        await workshopHub.Clients.User(memberUserId.ToString()).SendAsync(
+            "OrganizationMembershipChanged", organizationId.ToString());
     }
 }

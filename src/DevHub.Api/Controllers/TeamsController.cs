@@ -1,3 +1,4 @@
+using DevHub.Api.Realtime;
 using System.ComponentModel.DataAnnotations;
 using DevHub.Application.Teams;
 using DevHub.Application.Users;
@@ -16,7 +17,7 @@ public sealed record SaveTeamRequest(
 [Tags("Teams")]
 [Route("api/organizations/{organizationId:guid}/teams")]
 [Authorize]
-public sealed class TeamsController(ISender sender) : ApiControllerBase
+public sealed class TeamsController(ISender sender, WorkshopRealtime realtime) : ApiControllerBase
 {
     [HttpGet]
     [EndpointName("ListTeams")]
@@ -65,6 +66,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
                 request.Name,
                 request.Description),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess
             ? CreatedAtAction(
                 nameof(Get),
@@ -96,6 +98,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
                 request.Name,
                 request.Description),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 
@@ -113,6 +116,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             new DeleteTeamCommand(organizationId, teamId, userId),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -148,6 +152,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             new AddTeamMemberCommand(organizationId, teamId, memberUserId, userId),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
@@ -166,6 +171,7 @@ public sealed class TeamsController(ISender sender) : ApiControllerBase
         var result = await sender.Send(
             new RemoveTeamMemberCommand(organizationId, teamId, memberUserId, userId),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 }

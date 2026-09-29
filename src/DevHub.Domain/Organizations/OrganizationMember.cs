@@ -26,6 +26,7 @@ public sealed class OrganizationMember
     public Guid UserId { get; private set; }
     public DateTimeOffset JoinedAtUtc { get; private set; }
     public bool IsOwner { get; private set; }
+    public string? Nickname { get; private set; }
     /// <summary>The workshop color scheme this member chose for themselves.</summary>
     public string ColorSchemeId { get; private set; } = OrganizationColorScheme.DefaultId;
     public IReadOnlyCollection<OrganizationMemberRole> RoleAssignments => _roleAssignments;
@@ -40,6 +41,11 @@ public sealed class OrganizationMember
         new(organizationId, userId, isOwner, joinedAtUtc);
 
     internal void SetOwner(bool isOwner) => IsOwner = isOwner;
+
+    internal void ChangeNickname(string? nickname)
+    {
+        Nickname = string.IsNullOrWhiteSpace(nickname) ? null : nickname.Trim();
+    }
 
     internal bool AssignRole(Guid roleId, DateTimeOffset assignedAtUtc)
     {
