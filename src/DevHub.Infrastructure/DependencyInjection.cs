@@ -35,7 +35,7 @@ public static class DependencyInjection
                 "The 'DefaultConnection' SQL Server connection string is not configured.");
 
         services.AddDbContext<ApplicationDbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IExternalAccountRepository, ExternalAccountRepository>();

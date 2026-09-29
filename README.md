@@ -9,8 +9,8 @@ ASP.NET Core API organized using Clean Architecture:
 
 ## Local setup
 
-The default connection string uses SQL Server LocalDB. Change `DefaultConnection` in
-`src/DevHub.Api/appsettings.json` when using another SQL Server instance.
+The local connection string uses SQL Server Express. Change `DefaultConnection` in
+`src/DevHub.Api/appsettings.Development.json` when using another SQL Server instance.
 
 Store the JWT signing key outside source control. It must contain at least 32 bytes:
 
@@ -131,3 +131,11 @@ delete teams and assign team leadership. Each team has exactly one leader; the o
 that leader can manage team members. A user must belong to the organization before they
 can be added to one of its teams, and the active leader cannot be removed until leadership
 is reassigned.
+
+## Environment switch
+
+Run `.\run-api.ps1 -Environment Local` (default) or `.\run-api.ps1 -Environment Production`. Alternatively select **Local** or **Production** in the IDE launch profiles. Pair with the client's `npm run dev:local` or `npm run dev:production`. Neither command publishes.
+
+Local selects ASP.NET Development, loads existing user-secrets, and returns OAuth logins to http://localhost:5173. The Google callback is https://localhost:7116/signin-google. Production selects ASP.NET Production and loads production configuration/environment variables; development user-secrets are not loaded. Supply production credentials and connection settings separately before running that profile. Existing server secrets remain on the server.
+
+Use `builder.Environment.IsDevelopment()` (or injected `IHostEnvironment.IsDevelopment()`) in API code instead of a compile-time flag. Environment selection requires restarting the processes.

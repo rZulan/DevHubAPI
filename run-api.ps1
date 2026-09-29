@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [ValidateSet("Local", "Production")]
+    [string]$Environment = "Local"
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,7 +38,7 @@ foreach ($listenerProcessId in $listenerProcessIds)
     Wait-Process -Id $listenerProcessId -Timeout 10 -ErrorAction SilentlyContinue
 }
 
-$runArguments = @("run", "--project", $projectPath, "--launch-profile", "https")
+$runArguments = @("run", "--project", $projectPath, "--launch-profile", $Environment)
 
 if ($NoBuild)
 {
