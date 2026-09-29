@@ -8,6 +8,7 @@ public sealed record SaveIdeasRequest(int Revision, JsonElement Items);
 
 public interface IIdeasService
 {
+    Task<bool> CanView(Guid organizationId, Guid projectId, Guid userId, CancellationToken ct);
     Task<Result<IdeasResponse>> Get(Guid organizationId, Guid projectId, Guid userId, CancellationToken ct);
     Task<Result<IdeasResponse>> Save(Guid organizationId, Guid projectId, Guid userId, SaveIdeasRequest request, CancellationToken ct);
 }

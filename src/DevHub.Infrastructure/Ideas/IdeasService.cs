@@ -23,11 +23,15 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
     {
         var org = await organizations.GetByIdAsync(orgId, ct);
         if (org is null || !org.HasMember(userId)) return Missing;
-        var project = await db.Projects.AsNoTracking().SingleOrDefaultAsync(p => p.Id == projectId && p.OrganizationId == orgId, ct);
+        var project = await db.Projects.AsNoTracking().Where(p => p.Id == projectId && p.OrganizationId == orgId)
+            .Select(p => new { p.TeamId }).SingleOrDefaultAsync(ct);
         if (project is null || !(org.HasPermission(userId, OrganizationPermissions.ViewAllProjects) || org.Teams.Any(t => t.Id == project.TeamId && t.HasMember(userId)))) return Missing;
         return write && !org.HasPermission(userId, OrganizationPermissions.EditIdeation)
             ? new Error("Ideas.Forbidden", "You need Edit ideation permission to save this canvas.", ErrorType.Forbidden) : null;
     }
+
+    public async Task<bool> CanView(Guid organizationId, Guid projectId, Guid userId, CancellationToken ct) =>
+        await Access(organizationId, projectId, userId, false, ct) is null;
 
     public async Task<Result<IdeasResponse>> Get(Guid organizationId, Guid projectId, Guid userId, CancellationToken ct)
     {
@@ -102,7 +106,7 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
             if (string.IsNullOrWhiteSpace(id) || id.Length > 100 || !ids.Add(id)) return false;
             var kind = Text("kind") ?? "rectangle";
             var groupId = Text("groupId");
-            if (kind is not ("rectangle" or "note") || groupId?.Length > 100) return false;
+            if (kind is not ("rectangle" or "note" or "ellipse" or "triangle" or "pentagon" or "hexagon" or "star" or "diamond" or "parallelogram" or "terminator" or "database" or "document" or "entity" or "line" or "arrow" or "double-arrow" or "elbow-arrow" or "text") || groupId?.Length > 100) return false;
             if (!Number("x", -1e12, 1e12) || !Number("y", -1e12, 1e12) || !Number("width", 23.999999, 1e12) || !Number("height", 23.999999, 1e12)
                 || !Number("cornerRadius", 0, 1e12) || !Number("outlineWidth", 1, 20) || !Number("fontSize", 1, 1000)
                 || !OptionalNumber("letterSpacing", -20, 100) || !OptionalNumber("lineHeight", 0.5, 5) || !OptionalNumber("textIndent", -500, 500)) return false;

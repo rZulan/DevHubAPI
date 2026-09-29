@@ -39,6 +39,9 @@ try
     var org = project.OrganizationId;
     var owner = await db.Organizations.Where(o => o.Id == org).Select(o => o.OwnerUserId).SingleAsync();
     var ct = CancellationToken.None;
+    Check(await service.CanView(org, project.Id, owner, ct), "Live subscription access accepts an authorized owner");
+    Check(!await service.CanView(org, project.Id, Guid.NewGuid(), ct), "Live subscription access rejects a non-member");
+    Check(!await service.CanView(Guid.NewGuid(), project.Id, owner, ct), "Live subscription access rejects another organization");
     var initial = Require(await service.Get(org, project.Id, owner, ct));
     const string shape = """
       {"id":"smoke-rectangle","kind":"rectangle","groupId":"smoke-group","x":-20,"y":30,"width":200,"height":100,"appearance":"fill","fillColor":"#abcdef","outlineColor":"#123456","cornerRadius":12,"outlineWidth":3,"outlineStyle":"dashed","text":"Saved text\nSecond line","noteHeader":"","noteBody":"","textAlign":"right","verticalAlign":"bottom","fontFamily":"Montserrat","fontSize":24,"bold":true,"italic":true,"underline":true,"strikethrough":true,"textColor":"auto","letterSpacing":1.5,"lineHeight":1.8,"textIndent":12,"noteHeaderStyle":{"fontFamily":"Poppins","fontSize":28,"bold":true,"italic":false,"underline":false,"strikethrough":false,"textColor":"#112233","letterSpacing":1,"lineHeight":1.2,"textIndent":0,"textAlign":"center"},"noteBodyStyle":{"fontFamily":"Roboto Mono","fontSize":14,"bold":false,"italic":true,"underline":false,"strikethrough":false,"textColor":"auto","letterSpacing":0.5,"lineHeight":1.6,"textIndent":10,"textAlign":"left"},"textRuns":[{"text":"Saved","bold":true,"italic":false,"underline":false,"strikethrough":false},{"text":" text\nSecond line","bold":false,"italic":true,"underline":false,"strikethrough":false}]}
