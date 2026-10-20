@@ -62,6 +62,7 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
             string? Text(string name) => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
             bool Number(string name, double min, double max) => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) && double.IsFinite(number) && number >= min && number <= max;
             bool OptionalNumber(string name, double min, double max) => !item.TryGetProperty(name, out _) || Number(name, min, max);
+            bool OptionalBoolean(string name) => !item.TryGetProperty(name, out var value) || value.ValueKind is JsonValueKind.True or JsonValueKind.False;
             bool Color(string name) => Text(name) is { } value && Regex.IsMatch(value, "^#[0-9a-fA-F]{6}$");
             bool RichRuns(string name)
             {
@@ -109,6 +110,8 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
             if (kind is not ("rectangle" or "note" or "ellipse" or "triangle" or "pentagon" or "hexagon" or "star" or "diamond" or "parallelogram" or "terminator" or "database" or "document" or "entity" or "line" or "arrow" or "double-arrow" or "elbow-arrow" or "text") || groupId?.Length > 100) return false;
             if (!Number("x", -1e12, 1e12) || !Number("y", -1e12, 1e12) || !Number("width", 23.999999, 1e12) || !Number("height", 23.999999, 1e12)
                 || !Number("cornerRadius", 0, 1e12) || !Number("outlineWidth", 1, 20) || !Number("fontSize", 1, 1000)
+                || !OptionalNumber("rotation", -359.999999, 359.999999)
+                || !OptionalBoolean("flipHorizontal") || !OptionalBoolean("flipVertical")
                 || !OptionalNumber("letterSpacing", -20, 100) || !OptionalNumber("lineHeight", 0.5, 5) || !OptionalNumber("textIndent", -500, 500)) return false;
             if (Text("appearance") is not ("fill" or "outlined") || Text("outlineStyle") is not ("solid" or "dashed" or "dotted" or "double" or "none")
                 || Text("textAlign") is not ("left" or "center" or "right") || Text("verticalAlign") is not ("top" or "center" or "bottom")
