@@ -47,6 +47,12 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
             case MoveTodoTaskRequest move:
                 Status(move.Status);
                 break;
+            case UpdateTodoTaskRequest edit:
+                Text("Title", edit.Title, 150, true);
+                Text("Description", edit.Description, 2000);
+                Status(edit.Status);
+                if (edit.AssigneeIds is null) errors["AssigneeIds"] = ["Choose assignees or leave the list empty."];
+                break;
         }
         return errors.Count == 0 ? null : new Error("Todos.Invalid", "Check the TODO fields.", ErrorType.Validation, errors);
     }
@@ -156,6 +162,38 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         task.AssignMany(ids, clock.GetUtcNow());
         todo.TouchBoard(clock.GetUtcNow());
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
+    }
+
+    public async Task<Result<TodoTaskResponse>> UpdateTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, Guid userId, UpdateTodoTaskRequest request, CancellationToken ct)
+    {
+        if ((Validate(request) ?? await CheckAccess(organizationId, projectId, userId, true, ct)) is { } error) return Result<TodoTaskResponse>.Failure(error);
+        var todo = await db.Set<Todo>().SingleOrDefaultAsync(t => t.Id == todoId && t.ProjectId == projectId, ct);
+        if (todo is null) return Result<TodoTaskResponse>.Failure(Missing);
+        var task = await db.Set<TodoTask>().Include(t => t.Assignees).SingleOrDefaultAsync(t => t.Id == taskId && t.TodoId == todoId, ct);
+        if (task is null) return Result<TodoTaskResponse>.Failure(Missing);
+        if (todo.BoardRevision != request.BoardRevision) return Result<TodoTaskResponse>.Failure(BoardChanged);
+        if (!todo.Columns.Any(c => c.Id == request.Status)) return Result<TodoTaskResponse>.Failure(InvalidStatus);
+        // Preserve existing assignments to former members; only new assignments need membership validation.
+        foreach (var id in request.AssigneeIds.Distinct().Where(id => !task.Assignees.Any(a => a.UserId == id)))
+            if (await ValidateAssignee(organizationId, id, ct) is { } assigneeError) return Result<TodoTaskResponse>.Failure(assigneeError);
+        var now = clock.GetUtcNow();
+        task.UpdateDetails(request.Title, request.Description ?? "", request.Status, now);
+        task.AssignMany(request.AssigneeIds, now);
+        todo.TouchBoard(now);
+        return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
+    }
+
+    public async Task<Result<bool>> DeleteTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, Guid userId, DeleteTodoTaskRequest request, CancellationToken ct)
+    {
+        if (await CheckAccess(organizationId, projectId, userId, true, ct) is { } error) return Result<bool>.Failure(error);
+        var todo = await db.Set<Todo>().SingleOrDefaultAsync(t => t.Id == todoId && t.ProjectId == projectId, ct);
+        if (todo is null) return Result<bool>.Failure(Missing);
+        var task = await db.Set<TodoTask>().SingleOrDefaultAsync(t => t.Id == taskId && t.TodoId == todoId, ct);
+        if (task is null) return Result<bool>.Failure(Missing);
+        if (todo.BoardRevision != request.BoardRevision) return Result<bool>.Failure(BoardChanged);
+        db.Remove(task);
+        todo.TouchBoard(clock.GetUtcNow());
+        return await SaveBoard(ct) ? Result<bool>.Success(true) : Result<bool>.Failure(BoardChanged);
     }
 
     public async Task<Result<TodoTaskResponse>> MoveTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, Guid userId, MoveTodoTaskRequest request, CancellationToken ct)

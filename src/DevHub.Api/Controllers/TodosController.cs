@@ -1,19 +1,28 @@
 using DevHub.Application.Todos;
+using DevHub.Api.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 
 namespace DevHub.Api.Controllers;
 
 [Authorize]
 [Tags("TODOs")]
 [Route("api/organizations/{organizationId:guid}/projects/{projectId:guid}/todos")]
-public sealed class TodosController(ITodoService todos) : ApiControllerBase
+public sealed class TodosController(ITodoService todos, IHubContext<WorkshopHub> hub, WorkshopRealtime realtime) : ApiControllerBase
 {
+    private async Task Changed(Guid organizationId, Guid projectId)
+    {
+        await realtime.Revalidate(organizationId, projectId);
+        await hub.Clients.Group(WorkshopHub.GetProjectToolsGroupName(organizationId, projectId)).SendAsync(
+            "ProjectToolChanged", projectId.ToString(), "todo", 0);
+    }
     [HttpPatch("{todoId:guid}/columns")]
     public async Task<IActionResult> ConfigureColumns(Guid organizationId, Guid projectId, Guid todoId, ConfigureTodoColumnsRequest request, CancellationToken ct)
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.ConfigureColumns(organizationId, projectId, todoId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
     [HttpPatch("{todoId:guid}/tasks/{taskId:guid}/assignees")]
@@ -21,6 +30,7 @@ public sealed class TodosController(ITodoService todos) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.ChangeAssignee(organizationId, projectId, todoId, taskId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
     [HttpGet("pages")]
@@ -49,6 +59,7 @@ public sealed class TodosController(ITodoService todos) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.Create(organizationId, projectId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? StatusCode(201, result.Value) : Failure(result.Error!);
     }
     [HttpPost("{todoId:guid}/tasks")]
@@ -56,6 +67,7 @@ public sealed class TodosController(ITodoService todos) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.AddTask(organizationId, projectId, todoId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? StatusCode(201, result.Value) : Failure(result.Error!);
     }
     [HttpPatch("{todoId:guid}/tasks/{taskId:guid}")]
@@ -63,13 +75,31 @@ public sealed class TodosController(ITodoService todos) : ApiControllerBase
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.MoveTask(organizationId, projectId, todoId, taskId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+    [HttpPut("{todoId:guid}/tasks/{taskId:guid}")]
+    public async Task<IActionResult> UpdateTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, UpdateTodoTaskRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.UpdateTask(organizationId, projectId, todoId, taskId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+    [HttpDelete("{todoId:guid}/tasks/{taskId:guid}")]
+    public async Task<IActionResult> DeleteTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, [FromBody] DeleteTodoTaskRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.DeleteTask(organizationId, projectId, todoId, taskId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
     [HttpPatch("{todoId:guid}/tasks/{taskId:guid}/assignee")]
     public async Task<IActionResult> AssignTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, AssignTodoTaskRequest request, CancellationToken ct)
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await todos.AssignTask(organizationId, projectId, todoId, taskId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
 }

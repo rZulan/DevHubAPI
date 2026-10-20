@@ -74,6 +74,10 @@ public sealed class TodoTask : BaseEntity
         MarkUpdated(now);
     }
     public void Move(string status, DateTimeOffset now) { Status = status; MarkUpdated(now); }
+    public void UpdateDetails(string title, string description, string status, DateTimeOffset now)
+    {
+        Title = title.Trim(); Description = description.Trim(); Status = status; MarkUpdated(now);
+    }
 }
 
 public sealed class TodoTaskAssignee

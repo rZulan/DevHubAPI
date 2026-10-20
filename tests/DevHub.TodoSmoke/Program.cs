@@ -133,6 +133,35 @@ try
     Require(await service.ChangeAssignee(org, project.Id, first.Id, task.Id, owner, new(owner, true), ct));
     db.ChangeTracker.Clear();
     Check(Require(await service.Get(org, project.Id, first.Id, owner, ct)).Tasks.Single(t => t.Id == task.Id).AssigneeIds.Count == 0, "Avatar removal persists");
+    var editable = Require(await service.AddTask(org, project.Id, second.Id, owner, new("Original title", "Original notes", "pending", AssigneeIds: [owner]), ct));
+    var editBoard = Require(await service.Get(org, project.Id, second.Id, owner, ct));
+    var editRequest = new UpdateTodoTaskRequest("  Updated title  ", "  Updated notes  ", "progress", [owner, secondPerson.Id, secondPerson.Id], editBoard.BoardRevision);
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, Guid.NewGuid(), editRequest, ct)).IsSuccess, "Non-member task edit rejected");
+    Check(!(await service.UpdateTask(Guid.NewGuid(), project.Id, second.Id, editable.Id, owner, editRequest, ct)).IsSuccess, "Cross-organization task edit rejected");
+    Check(!(await service.UpdateTask(org, project.Id, first.Id, editable.Id, owner, editRequest, ct)).IsSuccess, "Cross-board task edit rejected");
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest with {Title = "   "}, ct)).IsSuccess, "Blank edit title rejected");
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest with {Title = new string('x', 151)}, ct)).IsSuccess, "Long edit title rejected");
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest with {Status = "missing"}, ct)).IsSuccess, "Unknown edit column rejected");
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest with {AssigneeIds = [Guid.NewGuid()]}, ct)).IsSuccess, "New non-member edit assignee rejected");
+    Require(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest, ct));
+    db.ChangeTracker.Clear();
+    var editedBoard = Require(await service.Get(org, project.Id, second.Id, owner, ct));
+    var editedTask = editedBoard.Tasks.Single(t => t.Id == editable.Id);
+    Check(editedTask.Title == "Updated title" && editedTask.Description == "Updated notes" && editedTask.Status == "progress", "Task details edit persists after reload");
+    Check(editedTask.AssigneeIds.Count == 2 && editedTask.AssigneeIds.Contains(owner) && editedTask.AssigneeIds.Contains(secondPerson.Id), "Edit assignees persist and deduplicate");
+    Check(editedBoard.BoardRevision == editBoard.BoardRevision + 1, "Task edit increments board revision");
+    Check(!(await service.UpdateTask(org, project.Id, second.Id, editable.Id, owner, editRequest, ct)).IsSuccess, "Stale task edit rejected");
+    Check(!(await service.DeleteTask(org, project.Id, second.Id, editable.Id, owner, new(editBoard.BoardRevision), ct)).IsSuccess, "Stale task delete rejected");
+    Check(!(await service.DeleteTask(org, project.Id, first.Id, editable.Id, owner, new(editedBoard.BoardRevision), ct)).IsSuccess, "Cross-board task delete rejected");
+    Check(!(await service.DeleteTask(org, Guid.NewGuid(), second.Id, editable.Id, owner, new(editedBoard.BoardRevision), ct)).IsSuccess, "Cross-project task delete rejected");
+    Check(!(await service.DeleteTask(org, project.Id, second.Id, editable.Id, Guid.NewGuid(), new(editedBoard.BoardRevision), ct)).IsSuccess, "Non-member task delete rejected");
+    Require(await service.DeleteTask(org, project.Id, second.Id, editable.Id, owner, new(editedBoard.BoardRevision), ct));
+    db.ChangeTracker.Clear();
+    var deletedBoard = Require(await service.Get(org, project.Id, second.Id, owner, ct));
+    Check(deletedBoard.Tasks.All(t => t.Id != editable.Id), "Deleted task stays removed after reload");
+    Check(deletedBoard.BoardRevision == editedBoard.BoardRevision + 1, "Task delete increments board revision");
+    Check(!await db.Set<TodoTaskAssignee>().AnyAsync(a => a.TaskId == editable.Id), "Task deletion removes assignee records");
+    Check(!(await service.DeleteTask(org, project.Id, second.Id, editable.Id, owner, new(deletedBoard.BoardRevision), ct)).IsSuccess, "Already deleted task returns missing");
     Console.WriteLine("TODO persistence smoke checks passed.");
 }
 finally
