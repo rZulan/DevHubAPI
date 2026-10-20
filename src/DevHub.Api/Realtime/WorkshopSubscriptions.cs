@@ -5,10 +5,10 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace DevHub.Api.Realtime;
 
-public sealed record WorkshopSubscription(HubCallerContext Context, Guid OrganizationId, Guid UserId, Guid? ProjectId)
+public sealed record WorkshopSubscription(HubCallerContext Context, Guid OrganizationId, Guid UserId, Guid? ProjectId, bool ProjectTools = false)
 {
     public string Group => ProjectId is { } projectId
-        ? WorkshopHub.GetIdeasGroupName(OrganizationId, projectId)
+        ? ProjectTools ? WorkshopHub.GetProjectToolsGroupName(OrganizationId, projectId) : WorkshopHub.GetIdeasGroupName(OrganizationId, projectId)
         : WorkshopHub.GetGroupName(OrganizationId);
 }
 

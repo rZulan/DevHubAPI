@@ -13,6 +13,10 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.HasKey(project => project.Id);
         builder.Property(project => project.IdeasJson).HasColumnType("nvarchar(max)").HasDefaultValue("[]").IsRequired();
         builder.Property(project => project.IdeasRevision).HasDefaultValue(0);
+        builder.Property(project => project.ErdJson).HasColumnType("nvarchar(max)");
+        builder.Property(project => project.DesignJson).HasColumnType("nvarchar(max)");
+        builder.Property(project => project.RoadmapJson).HasColumnType("nvarchar(max)");
+        builder.Property(project => project.NotesJson).HasColumnType("nvarchar(max)");
 
         builder.Property(project => project.Name).HasMaxLength(150).IsRequired();
         builder.Property(project => project.NormalizedName).HasMaxLength(150).IsRequired();

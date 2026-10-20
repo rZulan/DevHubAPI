@@ -558,6 +558,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("DesignJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("DesignRevision")
+                        .HasColumnType("int");
+
                     b.Property<string>("DesignUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
@@ -570,6 +576,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ErdJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ErdRevision")
+                        .HasColumnType("int");
 
                     b.Property<string>("IdeasJson")
                         .IsRequired()
@@ -599,12 +611,24 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<string>("NotesJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("NotesRevision")
+                        .HasColumnType("int");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("RepositoryUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
+
+                    b.Property<string>("RoadmapJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("RoadmapRevision")
+                        .HasColumnType("int");
 
                     b.Property<string>("SdlcMethod")
                         .HasMaxLength(150)

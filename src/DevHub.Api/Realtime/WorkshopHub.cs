@@ -100,6 +100,31 @@ public sealed class WorkshopHub(
             selection.UserId.ToString(), selection.Username, selection.ShapeIds, Context.ConnectionAborted);
     }
 
+    public async Task JoinProjectTools(Guid organizationId, Guid projectId)
+    {
+        var ct = Context.ConnectionAborted;
+        var userId = GetAuthenticatedUserId();
+        if (!await ideasService.CanView(organizationId, projectId, userId, ct))
+            throw new HubException("You cannot access this project's tools.");
+        if (Context.Items.TryGetValue("project-tools-group", out var value) && value is string previous)
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, previous, ct);
+            subscriptions.Remove(Context.ConnectionId, previous);
+        }
+        var group = GetProjectToolsGroupName(organizationId, projectId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, group, ct);
+        subscriptions.Add(new(Context, organizationId, userId, projectId, ProjectTools: true));
+        // Recheck after joining so a revoked membership cannot retain a live subscription.
+        if (!await ideasService.CanView(organizationId, projectId, userId, ct))
+        {
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, group, ct);
+            subscriptions.Remove(Context.ConnectionId, group);
+            Context.Abort();
+            throw new HubException("You cannot access this project's tools.");
+        }
+        Context.Items["project-tools-group"] = group;
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         subscriptions.Remove(Context.ConnectionId);
@@ -126,4 +151,5 @@ public sealed class WorkshopHub(
     }
     public static string GetGroupName(Guid organizationId) => $"workshop:{organizationId:N}";
     public static string GetIdeasGroupName(Guid organizationId, Guid projectId) => $"ideas:{organizationId:N}:{projectId:N}";
+    public static string GetProjectToolsGroupName(Guid organizationId, Guid projectId) => $"project-tools:{organizationId:N}:{projectId:N}";
 }
