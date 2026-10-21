@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-10-21
+
+### Notes
+- Accept optional note emojis, including combined emoji and flags, and an explicit None value.
+- Preserve compatibility with older notes that do not include an emoji.
+- Reject malformed emoji values and strings longer than 32 UTF-16 code units.
+
+### Validation and deployment
+- Add passing regression checks for valid and malformed note emojis.
+- No database schema changes or migrations are required for this release.
+
 ## 2026-10-20
 
 ### Project tools and Notes

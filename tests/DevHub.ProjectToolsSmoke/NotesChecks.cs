@@ -14,6 +14,11 @@ internal static class NotesChecks
         Check(!Valid([note with {color = "red"}]), "Invalid note colors rejected");
         Check(!Valid([note with {updatedAt = "not-a-date"}]), "Invalid note dates rejected");
         Check(!Valid(["invalid"]), "Malformed note entries rejected");
+        var emojiNote = new {note.id, note.title, note.body, note.color, note.updatedAt, emoji = (object?)"🚀"};
+        foreach (var emoji in new object?[] {null, "📝", "🚀", "👩🏽‍💻", "🇵🇭"})
+            Check(Valid([emojiNote with {emoji = emoji}]), "Note emoji or None accepted");
+        foreach (var emoji in new object[] {"", 42, false, new {bad = true}, new string('x', 33)})
+            Check(!Valid([emojiNote with {emoji = emoji}]), "Malformed note emoji rejected");
     }
     private static void Check(bool condition, string label)
     {

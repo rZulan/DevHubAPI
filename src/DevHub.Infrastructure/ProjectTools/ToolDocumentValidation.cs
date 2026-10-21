@@ -122,6 +122,8 @@ public static class ToolDocumentValidation
         return notes.EnumerateArray().All(note => note.ValueKind == JsonValueKind.Object
             && Identity(note, ids) && String(note, "title", 150, true) && String(note, "body", 10000)
             && Color(note, "color") && String(note, "updatedAt", 100, true)
+            && (!note.TryGetProperty("emoji", out var emoji) || emoji.ValueKind == JsonValueKind.Null
+                || emoji.ValueKind == JsonValueKind.String && emoji.GetString() is {Length: > 0 and <= 32})
             && DateTimeOffset.TryParse(Text(note, "updatedAt"), System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out _));
     }
