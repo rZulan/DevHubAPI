@@ -127,10 +127,52 @@ public static class ToolDocumentValidation
             && DateTimeOffset.TryParse(Text(note, "updatedAt"), System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out _));
     }
+    private static readonly Dictionary<string, string[]> RoadmapPhases = new()
+    {
+        ["waterfall"] = ["requirements", "design", "implementation", "verification", "deployment", "maintenance"],
+        ["v-model"] = ["requirements", "system-design", "architecture", "module-design", "implementation", "unit", "integration", "system-testing", "acceptance"],
+        ["agile"] = ["backlog", "planning", "design", "build", "test", "release", "review"],
+        ["iterative"] = ["planning", "analysis", "design", "build", "test", "evaluate"],
+    };
+    private static bool RoadmapNotes(JsonElement document, string[] phases) =>
+        document.TryGetProperty("notes", out var notes) && notes.ValueKind == JsonValueKind.Object
+        && notes.EnumerateObject().All(p => phases.Contains(p.Name) && p.Value.ValueKind == JsonValueKind.String && p.Value.GetString()!.Length <= 10000);
+
+    private static bool RoadmapRelease(JsonElement release) => release.ValueKind == JsonValueKind.Object
+        && Number(release, "currentPhase", 0, 1) && release.GetProperty("currentPhase").TryGetInt32(out var phase)
+        && Boolean(release, "completed") && (!release.GetProperty("completed").GetBoolean() || phase == 1)
+        && RoadmapNotes(release, ["deployment", "maintenance"]);
+
+    private static bool RoadmapProgress(JsonElement document, string model)
+    {
+        if (document.ValueKind != JsonValueKind.Object || !RoadmapPhases.TryGetValue(model, out var phases)
+            || !Number(document, "currentPhase", 0, phases.Length - 1) || !document.GetProperty("currentPhase").TryGetInt32(out var phase)
+            || !Boolean(document, "completed") || document.GetProperty("completed").GetBoolean() && phase != phases.Length - 1
+            || !RoadmapNotes(document, phases)) return false;
+        if (document.TryGetProperty("release", out var release)
+            && (model != "iterative" || !document.GetProperty("completed").GetBoolean() || !RoadmapRelease(release))) return false;
+        var cycle = 1;
+        var cyclic = model is "agile" or "iterative";
+        if (document.TryGetProperty("cycle", out var cycleValue)
+            && (!cyclic || !cycleValue.TryGetInt32(out cycle) || cycle < 1 || cycle > 1001)) return false;
+        if (!document.TryGetProperty("history", out _)) return cycle == 1;
+        if (!cyclic || !Array(document, "history", 1000, out var history) || history.GetArrayLength() != cycle - 1) return false;
+        var expected = 1;
+        foreach (var entry in history.EnumerateArray())
+        {
+            if (entry.ValueKind != JsonValueKind.Object || !Number(entry, "cycle", expected, expected) || !entry.GetProperty("cycle").TryGetInt32(out _) || !RoadmapNotes(entry, phases)) return false;
+            if (entry.TryGetProperty("release", out var archivedRelease)
+                && (model != "iterative" || !RoadmapRelease(archivedRelease) || !archivedRelease.GetProperty("completed").GetBoolean())) return false;
+            expected++;
+        }
+        return true;
+    }
     private static bool Roadmap(JsonElement document)
     {
-        if (Text(document, "model") != "waterfall" || !Number(document, "currentPhase", 0, 5) || !document.GetProperty("currentPhase").TryGetInt32(out _) || !Boolean(document, "completed") || document.GetProperty("completed").GetBoolean() && document.GetProperty("currentPhase").GetInt32() != 5 || !document.TryGetProperty("notes", out var notes) || notes.ValueKind != JsonValueKind.Object) return false;
-        var keys = new HashSet<string> {"requirements", "design", "implementation", "verification", "deployment", "maintenance"};
-        return notes.EnumerateObject().All(p => keys.Contains(p.Name) && p.Value.ValueKind == JsonValueKind.String && (p.Value.GetString()?.Length ?? 0) <= 10000);
+        if (Text(document, "model") is not { } model || !RoadmapProgress(document, model)) return false;
+        if (!document.TryGetProperty("modelStates", out var states)) return true;
+        if (states.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>();
+        return states.EnumerateObject().All(p => p.Name != model && names.Add(p.Name) && RoadmapProgress(p.Value, p.Name));
     }
 }

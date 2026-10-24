@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-10-25
+
+### Development roadmap
+- Validate Waterfall, V Model, Agile, and Iterative progress with model-specific phases and notes.
+- Preserve inactive models, completed cycle history, and Iterative deployment and maintenance progress in the existing project documents.
+- Reject invalid phases, premature completion, malformed history, and release paths before evaluation is complete.
+- Retain compatibility with older Waterfall documents and existing revision and permission checks.
+
+### Validation and deployment
+- Pass roadmap schema checks and the complete project tool persistence smoke suite; roll back all test database writes.
+- Deploy with the matching client roadmap update; no database schema changes or migrations are required.
+
 ## 2026-10-21
 
 ### Notes

@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 // All real database writes are rolled back, including on test failures.
 ErdSchemaChecks.Run();
 NotesChecks.Run();
+RoadmapChecks.Run();
 if (args.Contains("--schema-only")) return;
 var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src/DevHub.Api"))
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
@@ -44,7 +45,7 @@ Check(!ToolDocumentValidation.Valid("erd", Json(optionalEnds.GetRawText().Replac
 var reversed = Json(documents["erd"].GetRawText().Replace("\"fromTable\":\"t1\",\"fromField\":\"f1\",\"toTable\":\"t2\",\"toField\":\"f2\",\"cardinality\":\"1:N\"", "\"fromTable\":\"t2\",\"fromField\":\"f2\",\"toTable\":\"t1\",\"toField\":\"f1\",\"cardinality\":\"N:1\",\"leftEnd\":\"many\",\"rightEnd\":\"one\""));
 Check(ToolDocumentValidation.Valid("erd", reversed), "Many-to-one validates the referenced key on the right");
 Check(!ToolDocumentValidation.Valid("ui-editor", Json(documents["ui-editor"].GetRawText().Replace("\"parentId\":\"frame\"", "\"parentId\":\"missing\""))), "Missing parent frame rejected");
-Check(!ToolDocumentValidation.Valid("sdlc", Json("""{"model":"agile","currentPhase":0,"completed":false,"notes":{}}""")), "Unsupported SDLC model rejected");
+Check(!ToolDocumentValidation.Valid("sdlc", Json("""{"model":"unknown","currentPhase":0,"completed":false,"notes":{}}""")), "Unsupported SDLC model rejected");
 Check(!ToolDocumentValidation.Valid("sdlc", Json("""{"model":"waterfall","currentPhase":2,"completed":true,"notes":{}}""")), "Premature roadmap completion rejected");
 Check(!ToolDocumentValidation.Valid("sdlc", Json("""{"model":"waterfall","currentPhase":{},"completed":false,"notes":{}}""")), "Malformed numeric property rejected without throwing");
 await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -69,6 +70,21 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         var erd = Require(await service.Get(project.OrganizationId, project.Id, owner, "erd", default));
         var arrowSaved = Require(await service.Save(project.OrganizationId, project.Id, owner, "erd", new(erd.Revision, reversed), default));
         Check(Require(await service.Get(project.OrganizationId, project.Id, owner, "erd", default)).Document?.GetRawText() == reversed.GetRawText(), "Custom arrows and many-to-one relationships persist through SQL");
+        foreach (var json in new[] {
+            """{"model":"v-model","currentPhase":8,"completed":true,"notes":{"acceptance":"Approved"},"modelStates":{"waterfall":{"currentPhase":2,"completed":false,"notes":{"implementation":"Original work"}}}}""",
+            """{"model":"agile","currentPhase":0,"completed":false,"notes":{"backlog":"Next sprint"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Feedback retained"}}]}""",
+            """{"model":"iterative","currentPhase":0,"completed":false,"notes":{"planning":"Refine the prototype"},"cycle":2,"history":[{"cycle":1,"notes":{"evaluate":"User feedback"}}]}""",
+            """{"model":"iterative","currentPhase":5,"completed":true,"notes":{"evaluate":"Release criteria met"},"release":{"currentPhase":0,"completed":false,"notes":{"deployment":"Release plan"}}}""",
+            """{"model":"waterfall","currentPhase":0,"completed":false,"notes":{},"modelStates":{"iterative":{"currentPhase":5,"completed":true,"notes":{"evaluate":"Release approved"},"release":{"currentPhase":1,"completed":false,"notes":{"deployment":"Shipped","maintenance":"Monitoring"}}}}}""",
+            """{"model":"iterative","currentPhase":0,"completed":false,"notes":{"planning":"Next version"},"cycle":2,"history":[{"cycle":1,"notes":{"evaluate":"Approved"},"release":{"currentPhase":1,"completed":true,"notes":{"deployment":"Shipped","maintenance":"Reviewed"}}}]}"""
+        })
+        {
+            var roadmap = Json(json);
+            var before = Require(await service.Get(project.OrganizationId, project.Id, owner, "sdlc", default));
+            var saved = Require(await service.Save(project.OrganizationId, project.Id, owner, "sdlc", new(before.Revision, roadmap), default));
+            var loaded = Require(await service.Get(project.OrganizationId, project.Id, owner, "sdlc", default));
+            Check(loaded.Revision == saved.Revision && loaded.Document?.GetRawText() == roadmap.GetRawText(), $"{roadmap.GetProperty("model").GetString()} progress, inactive models and cycle notes persist through SQL");
+        }
     }
     finally {await transaction.RollbackAsync(); Console.WriteLine("All project document test writes rolled back.");}
 });
