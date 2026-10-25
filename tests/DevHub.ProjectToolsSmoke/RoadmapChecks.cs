@@ -40,6 +40,13 @@ internal static class RoadmapChecks
         Check("""{"model":"agile","currentPhase":0,"completed":false,"notes":{},"modelStates":{"waterfall":{"currentPhase":6,"completed":false,"notes":{}}}}""", false, "invalid inactive model");
         Check("""{"model":"agile","currentPhase":0,"completed":false,"notes":{},"modelStates":{"agile":{"currentPhase":0,"completed":false,"notes":{}}}}""", false, "duplicate active model");
         Check("""{"model":"iterative","currentPhase":{},"completed":false,"notes":{}}""", false, "malformed numeric property");
-        Console.WriteLine("SDLC model, legacy compatibility, cycle history and iterative release checks passed.");
+        Check("""{"model":"waterfall","currentPhase":0,"completed":false,"notes":{},"work":{"requirements":{"ownerId":"member","targetDate":"2028-02-29","checked":["Requirements specification"],"blocked":true,"blocker":"Review pending"}}}""", true, "phase owner, real date, checklist and blocker");
+        Check("""{"model":"agile","currentPhase":1,"completed":false,"notes":{},"cycle":2,"work":{"planning":{"ownerId":"member"}},"history":[{"cycle":1,"notes":{},"work":{"planning":{"checked":["Sprint Goal"]}}}]}""", true, "phase tracking archived with a Sprint");
+        Check("""{"model":"iterative","currentPhase":5,"completed":true,"notes":{},"release":{"currentPhase":0,"completed":false,"notes":{},"work":{"deployment":{"targetDate":"2026-11-01","blocked":true}}},"modelStates":{"waterfall":{"currentPhase":0,"completed":false,"notes":{},"work":{"requirements":{"ownerId":"member"}}}}}""", true, "release and inactive model tracking");
+        foreach (var work in new[] {"null", "[]", "{\"missing\":{}}", "{\"requirements\":{\"ownerId\":\"\"}}", "{\"requirements\":{\"targetDate\":\"2026-02-29\"}}", "{\"requirements\":{\"targetDate\":\"1899-12-31\"}}", "{\"requirements\":{\"blocked\":\"yes\"}}", "{\"requirements\":{\"checked\":[\"same\",\"same\"]}}", "{\"requirements\":{\"checked\":[1]}}"})
+            Check("{\"model\":\"waterfall\",\"currentPhase\":0,\"completed\":false,\"notes\":{},\"work\":" + work + "}", false, "malformed phase tracking");
+        Check("""{"model":"agile","currentPhase":1,"completed":false,"notes":{},"cycle":2,"history":[{"cycle":1,"notes":{},"work":{"planning":{"targetDate":"bad"}}}]}""", false, "invalid archived phase tracking");
+        Check("""{"model":"iterative","currentPhase":5,"completed":true,"notes":{},"release":{"currentPhase":0,"completed":false,"notes":{},"work":{"build":{}}}}""", false, "release tracking for wrong phase");
+        Console.WriteLine("SDLC model, legacy compatibility, cycle history, phase work and iterative release checks passed.");
     }
 }

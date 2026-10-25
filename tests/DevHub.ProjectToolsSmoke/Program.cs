@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 ErdSchemaChecks.Run();
 NotesChecks.Run();
 RoadmapChecks.Run();
+DesignChecks.Run();
 if (args.Contains("--schema-only")) return;
 var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src/DevHub.Api"))
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
@@ -31,7 +32,7 @@ var documents = new Dictionary<string, JsonElement>
     {"tables":[{"id":"t1","name":"users","x":10,"y":20,"fields":[{"id":"f1","name":"id","type":"UUID","length":"","primary":true,"nullable":false,"unique":false,"defaultValue":""}]},{"id":"t2","name":"orders","x":400,"y":200,"fields":[{"id":"f2","name":"user_id","type":"UUID","length":"","primary":false,"nullable":false,"unique":false,"defaultValue":""}]}],"relationships":[{"id":"r1","fromTable":"t1","fromField":"f1","toTable":"t2","toField":"f2","cardinality":"1:N","onDelete":"CASCADE"}]}
     """),
     ["ui-editor"] = Json("""
-    {"layers":[{"id":"frame","name":"Mobile","kind":"frame","x":10,"y":20,"width":390,"height":844,"fill":"#ffffff","stroke":"#000000","strokeWidth":1,"radius":0,"opacity":1,"text":"","fontSize":16,"textColor":"#000000","hidden":false,"locked":false},{"id":"button","parentId":"frame","name":"Action","kind":"button","x":30,"y":60,"width":180,"height":48,"fill":"#8b5cf6","stroke":"#000000","strokeWidth":0,"radius":12,"opacity":0.8,"text":"Continue","fontSize":16,"textColor":"#ffffff","hidden":false,"locked":false}]}
+    {"startFrameId":"frame","layers":[{"id":"frame","name":"Mobile","kind":"frame","x":10,"y":20,"width":390,"height":844,"fill":"#ffffff","stroke":"#000000","strokeWidth":1,"radius":0,"opacity":1,"text":"","fontSize":16,"textColor":"#000000","hidden":false,"locked":false},{"id":"button","parentId":"frame","name":"Action","kind":"button","x":30,"y":60,"width":180,"height":48,"fill":"#8b5cf6","stroke":"#000000","strokeWidth":0,"radius":12,"opacity":0.8,"text":"Continue","fontFamily":"Geist Variable","fontWeight":600,"textAlign":"center","lineHeight":1.4,"shadow":true,"interaction":{"action":"navigate","targetId":"frame","transition":"fade"},"fontSize":16,"textColor":"#ffffff","hidden":false,"locked":false}]}
     """),
     ["sdlc"] = Json("""{"model":"waterfall","currentPhase":2,"completed":false,"notes":{"implementation":"Building the project"}}"""),
     ["notes"] = Json("""{"notes":[{"id":"note-1","title":"Next release","body":"Review onboarding","color":"#f6e7a6","updatedAt":"2026-10-20T00:00:00.000Z"}]}""")
@@ -71,6 +72,8 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         var arrowSaved = Require(await service.Save(project.OrganizationId, project.Id, owner, "erd", new(erd.Revision, reversed), default));
         Check(Require(await service.Get(project.OrganizationId, project.Id, owner, "erd", default)).Document?.GetRawText() == reversed.GetRawText(), "Custom arrows and many-to-one relationships persist through SQL");
         foreach (var json in new[] {
+            """{"model":"agile","currentPhase":1,"completed":false,"notes":{"planning":"Sprint scope"},"cycle":2,"work":{"planning":{"ownerId":"member","targetDate":"2026-11-01","checked":["Sprint Goal"],"blocked":true,"blocker":"Dependencies pending"}},"history":[{"cycle":1,"notes":{},"work":{"planning":{"checked":["Sprint Goal"]}}}]}""",
+            """{"model":"iterative","currentPhase":5,"completed":true,"notes":{},"work":{"evaluate":{"ownerId":"member"}},"release":{"currentPhase":0,"completed":false,"notes":{"deployment":"Release plan"},"work":{"deployment":{"targetDate":"2026-11-02","blocked":true,"blocker":"Release window"}}},"modelStates":{"waterfall":{"currentPhase":0,"completed":false,"notes":{},"work":{"requirements":{"checked":["Requirements specification"]}}}}}""",
             """{"model":"v-model","currentPhase":8,"completed":true,"notes":{"acceptance":"Approved"},"modelStates":{"waterfall":{"currentPhase":2,"completed":false,"notes":{"implementation":"Original work"}}}}""",
             """{"model":"agile","currentPhase":0,"completed":false,"notes":{"backlog":"Next sprint"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Feedback retained"}}]}""",
             """{"model":"agile","currentPhase":7,"completed":true,"released":false,"notes":{"review":"Feedback","retrospective":"Improve automation"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Earlier feedback","retrospective":"Earlier improvement"},"released":true}]}""",

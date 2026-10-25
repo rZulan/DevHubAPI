@@ -2,7 +2,13 @@
 
 ## 2026-10-25
 
+### UI/UX studio
+- Validate optional typography, frame layout, embedded image fills, preview controls, flow starting points, and prototype interactions in project design documents.
+- Reject dangling screen links and invalid control or image metadata while preserving existing designs, permissions, and revision checks. No database migration is required.
+
 ### Development roadmap
+- Validate optional phase owners, real calendar dates, deliverable checklists, and blocker details across active models, inactive models, cycle history, and release paths.
+- Exercise roadmap tracking through the real persistence endpoints while preserving older documents, permissions, and revision checks.
 - Validate separate Agile Retrospective notes and optional-release status in active models, inactive models, and archived Sprints.
 - Preserve older Agile documents that combined Sprint Review and Retrospective while accepting the revised Scrum workflow.
 - Validate Waterfall, V Model, Agile, and Iterative progress with model-specific phases and notes.

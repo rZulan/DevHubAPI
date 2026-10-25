@@ -108,10 +108,31 @@ public static class ToolDocumentValidation
         if (!Array(document, "layers", 5000, out var layers)) return false;
         var ids = new HashSet<string>();
         var frames = layers.EnumerateArray().Where(l => l.ValueKind == JsonValueKind.Object && Text(l, "kind") == "frame").Select(l => Text(l, "id")).ToHashSet();
+        if (document.TryGetProperty("startFrameId", out _) && (Text(document, "startFrameId") is not { } start || !frames.Contains(start))) return false;
         foreach (var layer in layers.EnumerateArray())
         {
             if (layer.ValueKind != JsonValueKind.Object || !Identity(layer, ids) || !String(layer, "name", 150, true) || Text(layer, "kind") is not ("frame" or "rectangle" or "ellipse" or "text" or "button") || !Number(layer, "x", -1_000_000, 1_000_000) || !Number(layer, "y", -1_000_000, 1_000_000) || !Number(layer, "width", 16, 10000) || !Number(layer, "height", 16, 10000) || !Number(layer, "radius", 0, 5000) || !Number(layer, "strokeWidth", 0, 20) || !Number(layer, "opacity", 0, 1) || !Number(layer, "fontSize", 1, 500) || !String(layer, "text", 100000) || !Color(layer, "fill") || !Color(layer, "stroke") || !Color(layer, "textColor") || !Boolean(layer, "hidden") || !Boolean(layer, "locked")) return false;
             if (layer.TryGetProperty("parentId", out _) && (Text(layer, "parentId") is not { } parent || !frames.Contains(parent) || Text(layer, "kind") == "frame")) return false;
+            if (layer.TryGetProperty("fontFamily", out _) && Text(layer, "fontFamily") is not ("Inter" or "Geist Variable" or "Manrope Variable" or "Arial" or "Georgia" or "IBM Plex Mono")) return false;
+            if (layer.TryGetProperty("fontWeight", out _) && !Number(layer, "fontWeight", 100, 900)) return false;
+            if (layer.TryGetProperty("lineHeight", out _) && !Number(layer, "lineHeight", .8, 3)) return false;
+            if (layer.TryGetProperty("textAlign", out _) && Text(layer, "textAlign") is not ("left" or "center" or "right")) return false;
+            if (layer.TryGetProperty("shadow", out _) && !Boolean(layer, "shadow")) return false;
+            if (layer.TryGetProperty("layout", out _) && Text(layer, "layout") is not ("free" or "horizontal" or "vertical")) return false;
+            if (layer.TryGetProperty("gap", out _) && !Number(layer, "gap", 0, 500)) return false;
+            if (layer.TryGetProperty("padding", out _) && !Number(layer, "padding", 0, 500)) return false;
+            if (layer.TryGetProperty("image", out _) && (Text(layer, "image") is not {Length: <= 2_800_000} image || !Regex.IsMatch(image, "^data:image/(png|jpeg|webp|gif);base64,[a-zA-Z0-9+/]+={0,2}$", RegexOptions.IgnoreCase))) return false;
+            if (layer.TryGetProperty("imageFit", out _) && Text(layer, "imageFit") is not ("cover" or "contain")) return false;
+            if (layer.TryGetProperty("control", out _) && Text(layer, "control") is not ("input" or "checkbox" or "toggle")) return false;
+            if (layer.TryGetProperty("interaction", out var interaction))
+            {
+                if (interaction.ValueKind != JsonValueKind.Object || Text(interaction, "action") is not ("navigate" or "back" or "overlay" or "close") || Text(interaction, "transition") is not ("instant" or "fade" or "slide")) return false;
+                if (Text(interaction, "action") is "navigate" or "overlay")
+                {
+                    if (Text(interaction, "targetId") is not { } target || !frames.Contains(target)) return false;
+                }
+                else if (interaction.TryGetProperty("targetId", out _)) return false;
+            }
         }
         return true;
     }
@@ -138,10 +159,34 @@ public static class ToolDocumentValidation
         document.TryGetProperty("notes", out var notes) && notes.ValueKind == JsonValueKind.Object
         && notes.EnumerateObject().All(p => phases.Contains(p.Name) && p.Value.ValueKind == JsonValueKind.String && p.Value.GetString()!.Length <= 10000);
 
+    private static bool RoadmapWork(JsonElement document, string[] phases)
+    {
+        if (!document.TryGetProperty("work", out var work)) return true;
+        if (work.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>();
+        foreach (var entry in work.EnumerateObject())
+        {
+            var value = entry.Value;
+            if (!phases.Contains(entry.Name) || !names.Add(entry.Name) || value.ValueKind != JsonValueKind.Object) return false;
+            if (value.TryGetProperty("ownerId", out _) && !String(value, "ownerId", 100, true)) return false;
+            if (value.TryGetProperty("targetDate", out _) && (Text(value, "targetDate") is not {Length: 10} date
+                || !DateOnly.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed) || parsed.Year < 1900)) return false;
+            if (value.TryGetProperty("blocked", out _) && !Boolean(value, "blocked")) return false;
+            if (value.TryGetProperty("blocker", out _) && !String(value, "blocker", 2000)) return false;
+            if (value.TryGetProperty("checked", out _))
+            {
+                if (!Array(value, "checked", 50, out var items)) return false;
+                var unique = new HashSet<string>();
+                foreach (var item in items.EnumerateArray()) if (item.ValueKind != JsonValueKind.String || item.GetString() is not {Length: > 0 and <= 500} label || string.IsNullOrWhiteSpace(label) || !unique.Add(label)) return false;
+            }
+        }
+        return true;
+    }
+
     private static bool RoadmapRelease(JsonElement release) => release.ValueKind == JsonValueKind.Object
         && Number(release, "currentPhase", 0, 1) && release.GetProperty("currentPhase").TryGetInt32(out var phase)
         && Boolean(release, "completed") && (!release.GetProperty("completed").GetBoolean() || phase == 1)
-        && RoadmapNotes(release, ["deployment", "maintenance"]);
+        && RoadmapNotes(release, ["deployment", "maintenance"]) && RoadmapWork(release, ["deployment", "maintenance"]);
 
     private static bool RoadmapProgress(JsonElement document, string model)
     {
@@ -149,7 +194,7 @@ public static class ToolDocumentValidation
             || !Number(document, "currentPhase", 0, phases.Length - 1) || !document.GetProperty("currentPhase").TryGetInt32(out var phase)
             || !Boolean(document, "completed") || document.GetProperty("completed").GetBoolean() && phase != phases.Length - 1
                 && !(model == "agile" && phase == 6 && !document.TryGetProperty("released", out _))
-            || !RoadmapNotes(document, phases)) return false;
+            || !RoadmapNotes(document, phases) || !RoadmapWork(document, phases)) return false;
         if (document.TryGetProperty("released", out _) && (model != "agile" || !Boolean(document, "released"))) return false;
         if (document.TryGetProperty("release", out var release)
             && (model != "iterative" || !document.GetProperty("completed").GetBoolean() || !RoadmapRelease(release))) return false;
@@ -162,7 +207,7 @@ public static class ToolDocumentValidation
         var expected = 1;
         foreach (var entry in history.EnumerateArray())
         {
-            if (entry.ValueKind != JsonValueKind.Object || !Number(entry, "cycle", expected, expected) || !entry.GetProperty("cycle").TryGetInt32(out _) || !RoadmapNotes(entry, phases)) return false;
+            if (entry.ValueKind != JsonValueKind.Object || !Number(entry, "cycle", expected, expected) || !entry.GetProperty("cycle").TryGetInt32(out _) || !RoadmapNotes(entry, phases) || !RoadmapWork(entry, phases)) return false;
             if (entry.TryGetProperty("released", out _) && (model != "agile" || !Boolean(entry, "released"))) return false;
             if (entry.TryGetProperty("release", out var archivedRelease)
                 && (model != "iterative" || !RoadmapRelease(archivedRelease) || !archivedRelease.GetProperty("completed").GetBoolean())) return false;
