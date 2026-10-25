@@ -13,6 +13,12 @@ internal static class RoadmapChecks
         Check("""{"model":"waterfall","currentPhase":2,"completed":false,"notes":{"implementation":"Existing work"}}""", true, "legacy Waterfall");
         Check("""{"model":"v-model","currentPhase":8,"completed":true,"notes":{"acceptance":"Signed off"},"modelStates":{"waterfall":{"currentPhase":2,"completed":false,"notes":{"implementation":"Preserved"}}}}""", true, "V Model with inactive Waterfall");
         Check("""{"model":"agile","currentPhase":6,"completed":true,"notes":{"review":"Learned"},"cycle":2,"history":[{"cycle":1,"notes":{"backlog":"First sprint"}}]}""", true, "Agile cycle history");
+        Check("""{"model":"agile","currentPhase":7,"completed":true,"released":false,"notes":{"review":"Stakeholder feedback","retrospective":"Improve CI"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Prior feedback","retrospective":"Team improvement"},"released":true}]}""", true, "Scrum completion without release and separate retrospective notes");
+        Check("""{"model":"agile","currentPhase":6,"completed":false,"released":true,"notes":{"release":"Done increment shipped"}}""", true, "Optional release before Review");
+        Check("""{"model":"agile","currentPhase":6,"completed":true,"released":false,"notes":{}}""", false, "New Scrum flow cannot complete before Retrospective");
+        Check("""{"model":"agile","currentPhase":7,"completed":false,"released":"yes","notes":{}}""", false, "Malformed released flag");
+        Check("""{"model":"waterfall","currentPhase":0,"completed":false,"released":false,"notes":{}}""", false, "Scrum release flag on wrong model");
+        Check("""{"model":"agile","currentPhase":0,"completed":false,"released":false,"notes":{},"cycle":2,"history":[{"cycle":1,"notes":{},"released":"no"}]}""", false, "Malformed archived release flag");
         Check("""{"model":"iterative","currentPhase":5,"completed":true,"notes":{"evaluate":"Feedback"}}""", true, "Iterative completion");
         Check("""{"model":"iterative","currentPhase":5,"completed":true,"notes":{"evaluate":"Approved"},"release":{"currentPhase":0,"completed":false,"notes":{"deployment":"Release plan"}}}""", true, "Iterative deployment after evaluation");
         Check("""{"model":"iterative","currentPhase":5,"completed":true,"notes":{},"release":{"currentPhase":1,"completed":true,"notes":{"deployment":"Shipped","maintenance":"Monitored"}}}""", true, "Iterative completed release");

@@ -3,6 +3,8 @@
 ## 2026-10-25
 
 ### Development roadmap
+- Validate separate Agile Retrospective notes and optional-release status in active models, inactive models, and archived Sprints.
+- Preserve older Agile documents that combined Sprint Review and Retrospective while accepting the revised Scrum workflow.
 - Validate Waterfall, V Model, Agile, and Iterative progress with model-specific phases and notes.
 - Preserve inactive models, completed cycle history, and Iterative deployment and maintenance progress in the existing project documents.
 - Reject invalid phases, premature completion, malformed history, and release paths before evaluation is complete.

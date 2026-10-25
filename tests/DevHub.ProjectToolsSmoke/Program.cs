@@ -73,6 +73,7 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         foreach (var json in new[] {
             """{"model":"v-model","currentPhase":8,"completed":true,"notes":{"acceptance":"Approved"},"modelStates":{"waterfall":{"currentPhase":2,"completed":false,"notes":{"implementation":"Original work"}}}}""",
             """{"model":"agile","currentPhase":0,"completed":false,"notes":{"backlog":"Next sprint"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Feedback retained"}}]}""",
+            """{"model":"agile","currentPhase":7,"completed":true,"released":false,"notes":{"review":"Feedback","retrospective":"Improve automation"},"cycle":2,"history":[{"cycle":1,"notes":{"review":"Earlier feedback","retrospective":"Earlier improvement"},"released":true}]}""",
             """{"model":"iterative","currentPhase":0,"completed":false,"notes":{"planning":"Refine the prototype"},"cycle":2,"history":[{"cycle":1,"notes":{"evaluate":"User feedback"}}]}""",
             """{"model":"iterative","currentPhase":5,"completed":true,"notes":{"evaluate":"Release criteria met"},"release":{"currentPhase":0,"completed":false,"notes":{"deployment":"Release plan"}}}""",
             """{"model":"waterfall","currentPhase":0,"completed":false,"notes":{},"modelStates":{"iterative":{"currentPhase":5,"completed":true,"notes":{"evaluate":"Release approved"},"release":{"currentPhase":1,"completed":false,"notes":{"deployment":"Shipped","maintenance":"Monitoring"}}}}}""",

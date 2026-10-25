@@ -131,7 +131,7 @@ public static class ToolDocumentValidation
     {
         ["waterfall"] = ["requirements", "design", "implementation", "verification", "deployment", "maintenance"],
         ["v-model"] = ["requirements", "system-design", "architecture", "module-design", "implementation", "unit", "integration", "system-testing", "acceptance"],
-        ["agile"] = ["backlog", "planning", "design", "build", "test", "release", "review"],
+        ["agile"] = ["backlog", "planning", "design", "build", "test", "release", "review", "retrospective"],
         ["iterative"] = ["planning", "analysis", "design", "build", "test", "evaluate"],
     };
     private static bool RoadmapNotes(JsonElement document, string[] phases) =>
@@ -148,7 +148,9 @@ public static class ToolDocumentValidation
         if (document.ValueKind != JsonValueKind.Object || !RoadmapPhases.TryGetValue(model, out var phases)
             || !Number(document, "currentPhase", 0, phases.Length - 1) || !document.GetProperty("currentPhase").TryGetInt32(out var phase)
             || !Boolean(document, "completed") || document.GetProperty("completed").GetBoolean() && phase != phases.Length - 1
+                && !(model == "agile" && phase == 6 && !document.TryGetProperty("released", out _))
             || !RoadmapNotes(document, phases)) return false;
+        if (document.TryGetProperty("released", out _) && (model != "agile" || !Boolean(document, "released"))) return false;
         if (document.TryGetProperty("release", out var release)
             && (model != "iterative" || !document.GetProperty("completed").GetBoolean() || !RoadmapRelease(release))) return false;
         var cycle = 1;
@@ -161,6 +163,7 @@ public static class ToolDocumentValidation
         foreach (var entry in history.EnumerateArray())
         {
             if (entry.ValueKind != JsonValueKind.Object || !Number(entry, "cycle", expected, expected) || !entry.GetProperty("cycle").TryGetInt32(out _) || !RoadmapNotes(entry, phases)) return false;
+            if (entry.TryGetProperty("released", out _) && (model != "agile" || !Boolean(entry, "released"))) return false;
             if (entry.TryGetProperty("release", out var archivedRelease)
                 && (model != "iterative" || !RoadmapRelease(archivedRelease) || !archivedRelease.GetProperty("completed").GetBoolean())) return false;
             expected++;
