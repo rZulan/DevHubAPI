@@ -29,7 +29,7 @@ internal static class OrganizationErrors
 
     public static readonly Error OwnerRequired = new(
         "Organizations.OwnerRequired",
-        "Only the organization owner can create invite links.",
+        "Only an organization owner can perform this action.",
         ErrorType.Forbidden);
 
     public static readonly Error PermissionRequired = new(
@@ -482,7 +482,7 @@ internal sealed class AcceptOrganizationInviteCommandHandler(
         var organization = await organizationRepository.GetByIdAsync(
             invite.OrganizationId,
             cancellationToken);
-        if (organization is null)
+        if (organization is null || !organization.HasPermission(invite.CreatedByUserId, OrganizationPermissions.CreateInvites))
         {
             return Result<OrganizationResponse>.Failure(OrganizationErrors.InvalidInvite);
         }
@@ -637,7 +637,7 @@ internal sealed class PublishOrganizationDashboardCommandHandler(
             return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.NotFound);
         }
         if (!organization.HasPermission(
-            request.RequestingUserId, OrganizationPermissions.ManageOrganization))
+            request.RequestingUserId, OrganizationPermissions.ManageDashboard))
         {
             return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.PermissionRequired);
         }

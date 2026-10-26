@@ -38,4 +38,10 @@ public sealed class OrganizationInvite : BaseEntity
         new(Guid.NewGuid(), organizationId, createdByUserId, tokenHash, expiresAtUtc, createdAtUtc);
 
     public bool IsExpired(DateTimeOffset now) => now >= ExpiresAtUtc;
+    public void Revoke(DateTimeOffset now)
+    {
+        if (IsExpired(now)) return;
+        ExpiresAtUtc = now;
+        MarkUpdated(now);
+    }
 }

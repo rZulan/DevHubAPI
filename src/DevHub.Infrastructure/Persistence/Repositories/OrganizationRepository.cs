@@ -89,6 +89,14 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
             .SingleOrDefaultAsync(invite => invite.TokenHash == tokenHash, cancellationToken);
 
     public void Add(Organization organization) => dbContext.Organizations.Add(organization);
+    public Task<OrganizationInvite?> GetInviteByIdAsync(Guid organizationId, Guid inviteId, CancellationToken cancellationToken = default) =>
+        dbContext.OrganizationInvites.SingleOrDefaultAsync(invite => invite.OrganizationId == organizationId && invite.Id == inviteId, cancellationToken);
+
+    public async Task<IReadOnlyList<OrganizationInvite>> ListActiveInvitesAsync(Guid organizationId, Guid? createdByUserId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+        await dbContext.OrganizationInvites.AsNoTracking()
+            .Where(invite => invite.OrganizationId == organizationId && invite.ExpiresAtUtc > now && (!createdByUserId.HasValue || invite.CreatedByUserId == createdByUserId))
+            .OrderByDescending(invite => invite.CreatedAtUtc).Take(100).ToListAsync(cancellationToken);
+
     public void AddInvite(OrganizationInvite invite) => dbContext.OrganizationInvites.Add(invite);
     public void Remove(Organization organization) => dbContext.Organizations.Remove(organization);
 }

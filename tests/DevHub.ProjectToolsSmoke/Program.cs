@@ -13,17 +13,24 @@ using Microsoft.Extensions.DependencyInjection;
 // All real database writes are rolled back, including on test failures.
 ErdSchemaChecks.Run();
 NotesChecks.Run();
+WikiChecks.Run();
 RoadmapChecks.Run();
 DesignChecks.Run();
 if (args.Contains("--schema-only")) return;
 var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src/DevHub.Api"))
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
     .AddUserSecrets(Assembly.Load("DevHub.Api"), optional: true).AddEnvironmentVariables().Build();
+await using var isolatedDatabase = args.Contains("--isolated") ? new IsolatedSmokeDatabase(configuration) : null;
 var services = new ServiceCollection(); services.AddLogging(); services.AddInfrastructure(configuration);
 await using var provider = services.BuildServiceProvider();
 await using var scope = provider.CreateAsyncScope();
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var service = scope.ServiceProvider.GetRequiredService<IProjectToolsService>();
+if (isolatedDatabase is not null)
+{
+    await isolatedDatabase.Seed(db, ProjectDocumentMigrationChecks.LegacyMigration, ProjectDocumentMigrationChecks.Run);
+    await ProjectDocumentPersistenceChecks.Run(provider);
+}
 await CollaborationChecks.Run();
 JsonElement Json(string json) => JsonSerializer.Deserialize<JsonElement>(json);
 var documents = new Dictionary<string, JsonElement>
@@ -35,7 +42,8 @@ var documents = new Dictionary<string, JsonElement>
     {"startFrameId":"frame","layers":[{"id":"frame","name":"Mobile","kind":"frame","x":10,"y":20,"width":390,"height":844,"fill":"#ffffff","stroke":"#000000","strokeWidth":1,"radius":0,"opacity":1,"text":"","fontSize":16,"textColor":"#000000","hidden":false,"locked":false},{"id":"button","parentId":"frame","name":"Action","kind":"button","x":30,"y":60,"width":180,"height":48,"fill":"#8b5cf6","stroke":"#000000","strokeWidth":0,"radius":12,"opacity":0.8,"text":"Continue","fontFamily":"Geist Variable","fontWeight":600,"textAlign":"center","lineHeight":1.4,"shadow":true,"interaction":{"action":"navigate","targetId":"frame","transition":"fade"},"fontSize":16,"textColor":"#ffffff","hidden":false,"locked":false}]}
     """),
     ["sdlc"] = Json("""{"model":"waterfall","currentPhase":2,"completed":false,"notes":{"implementation":"Building the project"}}"""),
-    ["notes"] = Json("""{"notes":[{"id":"note-1","title":"Next release","body":"Review onboarding","color":"#f6e7a6","updatedAt":"2026-10-20T00:00:00.000Z"}]}""")
+    ["notes"] = Json("""{"notes":[{"id":"note-1","title":"Next release","body":"Review onboarding","color":"#f6e7a6","updatedAt":"2026-10-20T00:00:00.000Z"}]}"""),
+    ["wiki"] = Json("""{"homePageId":"home","pages":[{"id":"home","slug":"home","title":"Home","body":"# Welcome","message":"Create home","authorId":"member","updatedAt":"2026-10-26T05:00:00.000Z","history":[{"id":"version-1","title":"Home","body":"Earlier content","message":"Initial page","authorId":"member","updatedAt":"2026-10-25T05:00:00.000Z"}]}]}""")
 };
 foreach (var (tool, document) in documents) Check(ToolDocumentValidation.Valid(tool, document), $"Valid {tool} document accepted");
 Check(!ToolDocumentValidation.Valid("erd", Json(documents["erd"].GetRawText().Replace("\"toField\":\"f2\"", "\"toField\":\"missing\""))), "Dangling ERD reference rejected");
@@ -56,12 +64,16 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
     {
         var project = await db.Projects.AsNoTracking().FirstAsync();
         var owner = await db.Organizations.Where(o => o.Id == project.OrganizationId).Select(o => o.OwnerUserId).SingleAsync();
+        await OrganizationPermissionPersistenceChecks.Run(scope.ServiceProvider, project, documents);
         foreach (var (tool, document) in documents)
         {
             var initial = Require(await service.Get(project.OrganizationId, project.Id, owner, tool, default));
             var saved = Require(await service.Save(project.OrganizationId, project.Id, owner, tool, new(initial.Revision, document), default));
             var loaded = Require(await service.Get(project.OrganizationId, project.Id, owner, tool, default));
             Check(loaded.Revision == initial.Revision + 1 && loaded.Document?.GetRawText() == document.GetRawText(), $"{tool} round trips through SQL with its own revision");
+            var stored = await db.ProjectDocuments.AsNoTracking().SingleAsync(row => row.ProjectId == project.Id && row.ToolType == tool);
+            Check(stored.ContentJson == document.GetRawText() && stored.Revision == saved.Revision && stored.UpdatedByUserId == owner && stored.UpdatedAtUtc is not null,
+                $"{tool} saves its content and editor metadata in ProjectDocuments");
             Check((await service.Save(project.OrganizationId, project.Id, owner, tool, new(initial.Revision, document), default)).Error?.Type == ErrorType.Conflict, $"{tool} stale writes cannot overwrite newer changes");
             Check((await service.Save(project.OrganizationId, project.Id, Guid.NewGuid(), tool, new(saved.Revision, document), default)).Error?.Type == ErrorType.NotFound, $"{tool} non-members cannot write");
             Check((await service.Get(Guid.NewGuid(), project.Id, owner, tool, default)).Error?.Type == ErrorType.NotFound, $"{tool} cannot be read through another organization");

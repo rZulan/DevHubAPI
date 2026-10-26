@@ -5,8 +5,11 @@ using DevHub.Infrastructure;
 using DevHub.Api.Realtime;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.HttpOverrides;
+using DevHub.Api.BugReports;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddBugReportRateLimiting();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -94,6 +97,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("Frontend");
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

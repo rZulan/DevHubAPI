@@ -67,6 +67,44 @@ Use `dotnet run --project src/DevHub.Api` when automatic restart behavior is not
 
 In development, Scalar is available at `http://localhost:5288/scalar/v1`.
 
+## Project editor documents
+
+`dbo.ProjectDocuments` stores the current Ideas, ERD, UI editor, SDLC, Notes, and Wiki
+documents. Each record has an ID, project ID, tool type, JSON content, revision,
+last editor (`UpdatedByUserId`), and UTC save time (`UpdatedAtUtc`). The unique
+project/tool index retains the existing one-document-per-tool behavior. New projects
+create a document record on the first successful save; their initial API responses
+remain unchanged. Project deletion cascades to its documents, while deleting an
+editor clears their attribution without deleting document content.
+
+`20261026084449_MoveEditorDocumentsToProjectDocuments` copies all six legacy JSON
+documents and their revisions before removing their twelve columns from `Projects`.
+Historical editor and save-time metadata remain null because they were not recorded.
+Future saves record both. Database constraints reject malformed JSON, negative
+revisions, and duplicate project/tool records. Existing endpoints, permission checks,
+revision conflicts, and realtime events are unchanged. This migration does not add
+multiple diagrams, document history, or automatic merging of simultaneous edits.
+
+When upgrading an existing installation, back up the database and stop the old API
+before applying migrations and starting the matching new API. The old API depends on
+the removed columns and cannot run against the new schema. From `api/`, for local use:
+
+```powershell
+dotnet ef database update --project src/DevHub.Infrastructure --startup-project src/DevHub.Api --configuration Release -- --environment Development
+```
+
+The migration's rollback restores the latest content and revisions to the legacy
+columns before dropping `ProjectDocuments`; the older schema cannot retain document
+IDs or save attribution. Stop the API before rolling back and restart the matching
+older API afterward.
+
+Verify migration upgrade/rollback, concurrent first and subsequent saves, metadata,
+constraints, permissions, and persistence against a disposable local SQL database:
+
+```powershell
+dotnet run --project tests/DevHub.ProjectToolsSmoke -c Release -- --isolated
+```
+
 ## Initial endpoints
 
 - `POST /api/auth/register`
@@ -101,6 +139,53 @@ Color schemes are personal: any member can choose or create them, nobody else ca
 and they are removed when the member leaves the organization. Smoke-test the rules against
 the local database (writes are rolled back) with
 `dotnet run --project tests/DevHub.AppearanceSmoke -c Release`.
+
+Project Wiki uses `GET|PUT /api/organizations/{organizationId}/projects/{projectId}/tools/wiki`.
+Members who can view a project can read its wiki; writes require **Manage wiki** (or
+owner/Administrator access). Saves use the shared document revision to reject stale
+writes and notify connected project viewers. A wiki supports up to 100 Markdown pages,
+100,000 characters per page, 20 previous versions per page, and a 4,000,000-character
+document. The `AddProjectWiki` migration adds independent wiki storage and revision
+columns. Wiki validation, SQL round trips, conflicts, and permission isolation run with
+`dotnet run --project tests/DevHub.ProjectToolsSmoke -c Release -- --isolated`.
+
+## Bug reports
+
+The `AddProjectBugReports` migration creates project reports, category definitions,
+public-link settings, and private attachment storage in SQL. Use the **Bug Reports**
+project resource to enable public reporting and copy `/report-bug/{token}` on the
+frontend's origin. Links start disabled; disabling blocks both GET and POST, and
+replacing a link invalidates its previous token without removing reports.
+
+- `GET|POST /api/organizations/{organizationId}/projects/{projectId}/bug-reports`
+- `GET|PUT /api/organizations/{organizationId}/projects/{projectId}/bug-reports/{reportId}`
+- `GET|PUT .../bug-reports/portal`
+- `POST .../bug-reports/categories`, `PUT .../bug-reports/categories/{categoryId}`
+- `GET .../bug-reports/{reportId}/attachments/{attachmentId}`
+- `GET|POST /api/public/bug-reports/{token}` (anonymous; form metadata and submission only)
+
+Submissions use multipart fields `submissionId` (UUID, reused on retries), `email`,
+`title`, `description`, optional `steps`, `environment`, and `categoryId`, `priority`
+(`low|medium|high|critical`), and repeated `files`. Email is an unverified sender
+reference; no account or email delivery is required. Public responses never list
+reports, reveal reporter emails, expose notes, or grant attachment downloads.
+Private project viewers can read reports; **Manage bug reports** is required to
+triage, submit team reports, manage categories, or change links. Triage and link
+updates use revisions to reject stale changes. Categories can be archived and restored.
+
+Allow up to 5 attachments, 10 MiB each and 25 MiB total. Supported types are PNG,
+JPEG, GIF, WebP, PDF, ZIP, MP4, WebM, and UTF-8 TXT/LOG/CSV/JSON. The API checks
+extensions, binary signatures or text encoding, sanitizes filenames, and returns
+files as authenticated downloads with `nosniff`. Request bodies are limited to
+28 MiB. Public POSTs are limited per API instance to 10 attempts per IP per hour;
+GETs to 60 per minute. Public project intake is capped at 200 reports and 256 MiB
+of attachments per UTC day. Links are submission capabilities; distribute them
+only to the intended reporters.
+
+Run real HTTP, multipart, authorization, throttling, and SQL checks in a disposable
+local database with `dotnet run --project tests/DevHub.BugReportsSmoke -c Release`.
+The browser fixture at `/tests/fixtures/bug-reports.html` uses isolated in-memory
+data and never writes to a project.
 
 Registration, login, external login, and token refresh issue an authentication cookie
 plus a separate rotating HTTP-only refresh-token cookie. Refresh tokens are no longer

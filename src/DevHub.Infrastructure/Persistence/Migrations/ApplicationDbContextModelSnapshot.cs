@@ -499,7 +499,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationRole", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Color")
@@ -545,6 +544,181 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.ToTable("OrganizationRoles", (string)null);
                 });
 
+            modelBuilder.Entity("DevHub.Domain.Projects.BugCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "NormalizedName")
+                        .IsUnique();
+
+                    b.ToTable("BugCategories", (string)null);
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(20000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("InternalNotes")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Steps")
+                        .IsRequired()
+                        .HasMaxLength(10000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
+
+                    b.HasIndex("Reference")
+                        .IsUnique();
+
+                    b.HasIndex("ProjectId", "CreatedAtUtc");
+
+                    b.HasIndex("ProjectId", "SubmissionId")
+                        .IsUnique();
+
+                    b.ToTable("BugReports", (string)null);
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReportAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("BugReportId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Size")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BugReportId");
+
+                    b.ToTable("BugReportAttachments", (string)null);
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReportPortal", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.HasKey("ProjectId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("BugReportPortals", (string)null);
+                });
+
             modelBuilder.Entity("DevHub.Domain.Projects.Project", b =>
                 {
                     b.Property<Guid>("Id")
@@ -558,12 +732,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("DesignJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("DesignRevision")
-                        .HasColumnType("int");
-
                     b.Property<string>("DesignUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
@@ -576,23 +744,6 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("ErdJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ErdRevision")
-                        .HasColumnType("int");
-
-                    b.Property<string>("IdeasJson")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("nvarchar(max)")
-                        .HasDefaultValue("[]");
-
-                    b.Property<int>("IdeasRevision")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
 
                     b.Property<Guid>("LeadUserId")
                         .HasColumnType("uniqueidentifier");
@@ -611,24 +762,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("NotesJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("NotesRevision")
-                        .HasColumnType("int");
-
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("RepositoryUrl")
                         .HasMaxLength(2048)
                         .HasColumnType("nvarchar(2048)");
-
-                    b.Property<string>("RoadmapJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("RoadmapRevision")
-                        .HasColumnType("int");
 
                     b.Property<string>("SdlcMethod")
                         .HasMaxLength(150)
@@ -673,6 +812,49 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Projects", (string)null);
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.ProjectDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ContentJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("ToolType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.HasIndex("ProjectId", "ToolType")
+                        .IsUnique();
+
+                    b.ToTable("ProjectDocuments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProjectDocuments_ContentJson", "[ContentJson] IS NULL OR ISJSON([ContentJson]) = 1");
+
+                            t.HasCheckConstraint("CK_ProjectDocuments_Revision", "[Revision] >= 0");
+
+                            t.HasCheckConstraint("CK_ProjectDocuments_ToolType", "[ToolType] IN ('ideas', 'erd', 'ui-editor', 'sdlc', 'notes', 'wiki')");
+                        });
                 });
 
             modelBuilder.Entity("DevHub.Domain.Teams.Team", b =>
@@ -1057,6 +1239,47 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.Navigation("Organization");
                 });
 
+            modelBuilder.Entity("DevHub.Domain.Projects.BugCategory", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReport", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.BugCategory", null)
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReportAttachment", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.BugReport", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("BugReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReportPortal", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DevHub.Domain.Projects.Project", b =>
                 {
                     b.HasOne("DevHub.Domain.Users.User", "Lead")
@@ -1082,6 +1305,20 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.Navigation("Organization");
 
                     b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.ProjectDocument", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("DevHub.Domain.Users.User", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
                 });
 
             modelBuilder.Entity("DevHub.Domain.Teams.Team", b =>
@@ -1177,6 +1414,11 @@ namespace DevHub.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMember", b =>
                 {
                     b.Navigation("RoleAssignments");
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Projects.BugReport", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Teams.Team", b =>

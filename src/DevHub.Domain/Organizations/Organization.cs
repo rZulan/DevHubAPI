@@ -154,6 +154,22 @@ public sealed class Organization : BaseEntity
         return true;
     }
 
+    public bool MoveRole(Guid requestingUserId, Guid roleId, int direction, DateTimeOffset now)
+    {
+        if (direction is not (-1 or 1)) return false;
+        var roles = _roles.Where(role => !role.IsOwnerRole && !role.IsDefaultRole).OrderBy(role => role.Position).ToArray();
+        var index = Array.FindIndex(roles, role => role.Id == roleId);
+        var targetIndex = index + direction;
+        if (index < 0 || targetIndex < 0 || targetIndex >= roles.Length) return false;
+        var source = roles[index];
+        var target = roles[targetIndex];
+        if (!CanManageRole(requestingUserId, source) || !CanManageRole(requestingUserId, target) || source.Position == target.Position) return false;
+        var sourcePosition = source.Position;
+        source.Update(source.Name, source.Color, target.Position, source.Permissions, now);
+        target.Update(target.Name, target.Color, sourcePosition, target.Permissions, now);
+        return true;
+    }
+
     public bool AssignRole(Guid userId, Guid roleId, DateTimeOffset assignedAtUtc)
     {
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
@@ -191,6 +207,7 @@ public sealed class Organization : BaseEntity
         IsOwner(userId) && _members.Count(member => member.IsOwner) > 1;
 
     public bool CanAssignRole(Guid requestingUserId, Guid targetUserId, OrganizationRole role) =>
+        HasMember(targetUserId) &&
         requestingUserId != targetUserId &&
         CanManageRole(requestingUserId, role) &&
         !IsOwner(targetUserId) &&

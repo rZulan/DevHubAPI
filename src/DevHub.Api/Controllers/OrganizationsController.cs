@@ -17,7 +17,17 @@ public sealed record SaveOrganizationRoleRequest(
     [Required, StringLength(100)] string Name,
     [Required, StringLength(20)] string Color,
     int Position,
-    IReadOnlyList<string> Permissions);
+    [Required] IReadOnlyList<string> Permissions) : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(Color ?? "", "^#[0-9a-fA-F]{6}$")) yield return new("Choose a six-digit hex role color.", [nameof(Color)]);
+        if (Permissions is not null && (Permissions.Count > DevHub.Domain.Organizations.OrganizationPermissions.All.Count || Permissions.Distinct().Count() != Permissions.Count || Permissions.Any(permission => !DevHub.Domain.Organizations.OrganizationPermissions.All.Contains(permission))))
+            yield return new("Choose unique permissions from the supported organization permissions.", [nameof(Permissions)]);
+    }
+}
+
+public sealed record MoveOrganizationRoleRequest([Range(-1, 1)] int Direction);
 
 public sealed record SaveOrganizationDashboardRequest(
     [Required] IReadOnlyList<DashboardWidgetDefinition> Widgets);
@@ -200,6 +210,25 @@ public sealed class OrganizationsController(
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : Failure(result.Error!);
     }
 
+    [HttpGet("{organizationId:guid}/invites")]
+    [EndpointName("ListOrganizationInvites")]
+    public async Task<IActionResult> ListInvites(Guid organizationId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new ListOrganizationInvitesQuery(organizationId, userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpDelete("{organizationId:guid}/invites/{inviteId:guid}")]
+    [EndpointName("RevokeOrganizationInvite")]
+    public async Task<IActionResult> RevokeInvite(Guid organizationId, Guid inviteId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new RevokeOrganizationInviteCommand(organizationId, inviteId, userId), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
+    }
+
     [HttpPost("invites/{token}/accept")]
     [EndpointName("AcceptOrganizationInvite")]
     [ProducesResponseType<OrganizationResponse>(StatusCodes.Status200OK)]
@@ -291,6 +320,16 @@ public sealed class OrganizationsController(
             request.Position, request.Permissions), cancellationToken);
         if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPost("{organizationId:guid}/roles/{roleId:guid}/move")]
+    [EndpointName("MoveOrganizationRole")]
+    public async Task<IActionResult> MoveRole(Guid organizationId, Guid roleId, [FromBody] MoveOrganizationRoleRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new MoveOrganizationRoleCommand(organizationId, roleId, userId, request.Direction), cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
+        return result.IsSuccess ? NoContent() : Failure(result.Error!);
     }
 
     [HttpDelete("{organizationId:guid}/roles/{roleId:guid}")]

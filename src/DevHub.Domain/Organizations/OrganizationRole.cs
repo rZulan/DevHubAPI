@@ -80,7 +80,5 @@ public sealed class OrganizationRole : BaseEntity
         MarkUpdated(updatedAtUtc);
     }
 
-    public bool HasPermission(string permission) =>
-        Permissions.Contains(OrganizationPermissions.Administrator) ||
-        Permissions.Contains(permission);
+    public bool HasPermission(string permission) => OrganizationPermissions.Grants(Permissions, permission);
 }

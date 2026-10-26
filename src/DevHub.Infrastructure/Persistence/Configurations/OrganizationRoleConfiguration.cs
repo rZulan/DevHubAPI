@@ -10,6 +10,8 @@ internal sealed class OrganizationRoleConfiguration : IEntityTypeConfiguration<O
     {
         builder.ToTable("OrganizationRoles");
         builder.HasKey(role => role.Id);
+        // The domain assigns IDs before new roles are discovered through the organization graph.
+        builder.Property(role => role.Id).ValueGeneratedNever();
         builder.Property(role => role.Name).HasMaxLength(100).IsRequired();
         builder.Property(role => role.Color).HasMaxLength(20).IsRequired();
         builder.Property(role => role.Position).IsRequired();

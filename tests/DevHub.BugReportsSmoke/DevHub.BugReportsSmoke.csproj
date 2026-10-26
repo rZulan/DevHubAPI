@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DevHub.Api/DevHub.Api.csproj" />
+    <Compile Include="../DevHub.ProjectToolsSmoke/IsolatedSmokeDatabase.cs" Link="IsolatedSmokeDatabase.cs" />
+  </ItemGroup>
+</Project>

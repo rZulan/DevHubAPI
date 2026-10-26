@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using DevHub.Api.Realtime;
 
+await OrganizationSettingsChecks.Run();
 await MembershipNotifications.Run();
 await SubscriptionRevocation.Run();
 var removalTracker = new WorkshopPresenceTracker(TimeProvider.System);

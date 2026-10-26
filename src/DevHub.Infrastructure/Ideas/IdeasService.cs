@@ -5,11 +5,12 @@ using DevHub.Application.Common;
 using DevHub.Application.Ideas;
 using DevHub.Domain.Organizations;
 using DevHub.Infrastructure.Persistence;
+using DevHub.Infrastructure.ProjectTools;
 using Microsoft.EntityFrameworkCore;
 
 namespace DevHub.Infrastructure.Ideas;
 
-internal sealed class IdeasService(ApplicationDbContext db, IOrganizationRepository organizations) : IIdeasService
+internal sealed class IdeasService(ApplicationDbContext db, IOrganizationRepository organizations, ProjectDocumentStore documents) : IIdeasService
 {
     private static readonly Error Missing = new("Ideas.NotFound", "The project was not found.", ErrorType.NotFound);
     private static readonly HashSet<string> AllowedFonts = new(StringComparer.Ordinal)
@@ -36,8 +37,8 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
     public async Task<Result<IdeasResponse>> Get(Guid organizationId, Guid projectId, Guid userId, CancellationToken ct)
     {
         if (await Access(organizationId, projectId, userId, false, ct) is { } error) return Result<IdeasResponse>.Failure(error);
-        var project = await db.Projects.AsNoTracking().Where(p => p.Id == projectId && p.OrganizationId == organizationId).Select(p => new { p.IdeasJson, p.IdeasRevision }).SingleAsync(ct);
-        return Result<IdeasResponse>.Success(new(project.IdeasRevision, JsonSerializer.Deserialize<JsonElement>(project.IdeasJson)));
+        var document = await documents.Get(organizationId, projectId, "ideas", ct);
+        return Result<IdeasResponse>.Success(new(document?.Revision ?? 0, JsonSerializer.Deserialize<JsonElement>(document?.ContentJson ?? "[]")));
     }
 
     public async Task<Result<IdeasResponse>> Save(Guid organizationId, Guid projectId, Guid userId, SaveIdeasRequest request, CancellationToken ct)
@@ -46,9 +47,8 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
         if (request.Revision < 0 || request.Revision == int.MaxValue || !ValidItems(request.Items))
             return Result<IdeasResponse>.Failure(new Error("Ideas.Invalid", "The canvas contains invalid shapes or exceeds the supported document size.", ErrorType.Validation));
         var json = request.Items.GetRawText();
-        var count = await db.Projects.Where(p => p.Id == projectId && p.OrganizationId == organizationId && p.IdeasRevision == request.Revision)
-            .ExecuteUpdateAsync(update => update.SetProperty(p => p.IdeasJson, json).SetProperty(p => p.IdeasRevision, request.Revision + 1), ct);
-        if (count == 0) return Result<IdeasResponse>.Failure(new Error("Ideas.Conflict", "This canvas was changed in another session. Reload the saved version before editing again.", ErrorType.Conflict));
+        var saved = await documents.Save(organizationId, projectId, userId, "ideas", request.Revision, json, ct);
+        if (!saved) return Result<IdeasResponse>.Failure(new Error("Ideas.Conflict", "This canvas was changed in another session. Reload the saved version before editing again.", ErrorType.Conflict));
         return Result<IdeasResponse>.Success(new(request.Revision + 1, request.Items));
     }
 

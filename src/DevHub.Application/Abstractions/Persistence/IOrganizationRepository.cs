@@ -14,6 +14,8 @@ public interface IOrganizationRepository
     Task<IReadOnlyList<User>> ListMembersAsync(Guid organizationId, CancellationToken cancellationToken = default);
     Task<bool> NameExistsAsync(string name, Guid? excludingId = null, CancellationToken cancellationToken = default);
     Task<OrganizationInvite?> GetInviteByTokenHashAsync(string tokenHash, CancellationToken cancellationToken = default);
+    Task<OrganizationInvite?> GetInviteByIdAsync(Guid organizationId, Guid inviteId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<OrganizationInvite>> ListActiveInvitesAsync(Guid organizationId, Guid? createdByUserId, DateTimeOffset now, CancellationToken cancellationToken = default);
     void Add(Organization organization);
     void AddInvite(OrganizationInvite invite);
     void Remove(Organization organization);

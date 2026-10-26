@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-26
+
+### Project document storage
+- Move Ideas, ERD, UI editor, SDLC, Notes, and Wiki JSON and revision columns from Projects into ProjectDocuments.
+- Preserve existing content, revisions, empty document responses, API contracts, permissions, and realtime behavior.
+- Record the editor and UTC timestamp on future saves; leave unknown historical save metadata empty.
+- Enforce one document per project/tool, valid JSON, nonnegative revisions, project cleanup, and retained documents when an editor is deleted.
+- Migrate existing documents before removing legacy columns, and restore the latest content and revisions on rollback.
+- Verify upgrades, rollback/reapply, simultaneous first and later saves, save attribution, constraints, and permissions in a disposable local SQL database.
+
+### Organization settings and permissions
+- Add individual ERD, UI/UX, Notes, Roadmap, dashboard, and invitation-management permissions while retaining legacy permission grants.
+- List active invitation metadata and revoke links with organization, membership, and creator checks; reject invitation acceptance after the creator loses invite access.
+- Commit adjacent role-order changes atomically, validate role colors and permission lists, and reject role assignments to nonmembers.
+- Fix newly created roles being tracked as existing records by explicitly marking their domain-generated IDs.
+- Exercise role creation, individual tool write permissions, project visibility, and invitation revocation against a disposable local SQL database; roll back test writes and remove the test database.
+- These organization settings changes do not require new database columns.
+
 ## 2026-10-25
 
 ### UI/UX studio

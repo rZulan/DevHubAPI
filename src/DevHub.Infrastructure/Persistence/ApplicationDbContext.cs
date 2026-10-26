@@ -34,6 +34,13 @@ public sealed class ApplicationDbContext(
 
     public DbSet<Project> Projects => Set<Project>();
 
+    public DbSet<ProjectDocument> ProjectDocuments => Set<ProjectDocument>();
+
+    public DbSet<BugReport> BugReports => Set<BugReport>();
+    public DbSet<BugCategory> BugCategories => Set<BugCategory>();
+    public DbSet<BugReportPortal> BugReportPortals => Set<BugReportPortal>();
+    public DbSet<BugReportAttachment> BugReportAttachments => Set<BugReportAttachment>();
+
     public DbSet<ChatConversation> ChatConversations => Set<ChatConversation>();
 
     public DbSet<ChatParticipant> ChatParticipants => Set<ChatParticipant>();

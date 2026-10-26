@@ -32,6 +32,8 @@ selections.Update("first-2", ["shape-b"]);
 Check(selections.Leave("first-1")!.Selection.ShapeIds.SequenceEqual(["shape-b"]), "Closing one tab preserves the member's other active selection");
 var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var service = scope.ServiceProvider.GetRequiredService<IIdeasService>();
+await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+{
 await using var transaction = await db.Database.BeginTransactionAsync();
 try
 {
@@ -52,6 +54,9 @@ try
     db.ChangeTracker.Clear();
     var loaded = Require(await service.Get(org, project.Id, owner, ct));
     Check(loaded.Items.GetRawText() == items.GetRawText(), "Shapes, notes, groups, order, geometry, text and formatting round trip through SQL Server");
+    var document = await db.ProjectDocuments.AsNoTracking().SingleAsync(row => row.ProjectId == project.Id && row.ToolType == "ideas");
+    Check(document.ContentJson == items.GetRawText() && document.Revision == saved.Revision && document.UpdatedByUserId == owner && document.UpdatedAtUtc is not null,
+        "Ideas saves content, revision, editor and UTC timestamp in ProjectDocuments");
     Check((await service.Save(org, project.Id, owner, new(initial.Revision, items), ct)).Error?.Type == ErrorType.Conflict, "Stale writes cannot overwrite newer changes");
     Check((await service.Get(org, project.Id, Guid.NewGuid(), ct)).Error?.Type == ErrorType.NotFound, "Non-members cannot read canvases");
     Check((await service.Save(org, project.Id, Guid.NewGuid(), new(saved.Revision, items), ct)).Error?.Type == ErrorType.NotFound, "Non-members cannot save canvases");
@@ -65,6 +70,7 @@ try
     Check(cleared.Revision == saved.Revision + 1, "Invalid and stale writes did not modify the revision");
 }
 finally { await transaction.RollbackAsync(); Console.WriteLine("All test writes rolled back."); }
+});
 
 static T Require<T>(Result<T> result) => result.IsSuccess ? result.Value! : throw new Exception(result.Error!.Code);
 static void Check(bool value, string label) { if (!value) throw new Exception(label); Console.WriteLine($"PASS: {label}"); }

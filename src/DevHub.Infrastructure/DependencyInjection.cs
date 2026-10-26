@@ -38,11 +38,13 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<DevHub.Application.BugReports.IBugReportsService, DevHub.Infrastructure.BugReports.BugReportsService>();
         services.AddScoped<IExternalAccountRepository, ExternalAccountRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IOrganizationRepository, OrganizationRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<DevHub.Infrastructure.ProjectTools.ProjectDocumentStore>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<DevHub.Application.Ideas.IIdeasService, DevHub.Infrastructure.Ideas.IdeasService>();
         services.AddScoped<DevHub.Application.ProjectTools.IProjectToolsService, DevHub.Infrastructure.ProjectTools.ProjectToolsService>();
