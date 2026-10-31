@@ -24,7 +24,7 @@ internal static class ProjectDocumentPersistenceChecks
         await db.SaveChangesAsync();
         var tools = scope.ServiceProvider.GetRequiredService<IProjectToolsService>();
         var ideas = scope.ServiceProvider.GetRequiredService<IIdeasService>();
-        foreach (var tool in new[] { "erd", "ui-editor", "sdlc", "notes", "wiki" })
+        foreach (var tool in new[] { "erd", "ui-editor", "sdlc", "notes", "wiki", "calendar" })
         {
             var initial = Require(await tools.Get(project.OrganizationId, project.Id, owner, tool, default));
             Check(initial.Revision == 0 && initial.Document is null, $"New projects retain the empty {tool} response without a saved record");
@@ -36,7 +36,7 @@ internal static class ProjectDocumentPersistenceChecks
             !await db.ProjectDocuments.AnyAsync(document => document.ProjectId == project.Id),
             "A missing document only accepts revision zero on its first save");
 
-        foreach (var (tool, json) in new[] { ("erd", "{\"tables\":[],\"relationships\":[]}"), ("ideas", "[]") })
+        foreach (var (tool, json) in new[] { ("erd", "{\"tables\":[],\"relationships\":[]}"), ("ideas", "[]"), ("calendar", "{\"timeZone\":\"UTC\",\"events\":[]}") })
         {
             var document = JsonSerializer.Deserialize<JsonElement>(json);
             foreach (var revision in new[] { 0, 1 })

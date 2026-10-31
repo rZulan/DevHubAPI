@@ -6,10 +6,21 @@ using DevHub.Api.Realtime;
 using Scalar.AspNetCore;
 using Microsoft.AspNetCore.HttpOverrides;
 using DevHub.Api.BugReports;
+using DevHub.Api.Security;
+using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddBugReportRateLimiting();
+builder.Services.AddRequestSecurity(builder.Configuration);
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.AddServerHeader = false;
+    options.Limits.MaxRequestBodySize = 28 * 1024 * 1024;
+    options.Limits.MaxRequestHeadersTotalSize = 32 * 1024;
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(15);
+    options.Limits.MaxConcurrentUpgradedConnections = 200;
+});
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -37,7 +48,12 @@ builder.Services.AddProblemDetails(options =>
 });
 
 builder.Services.AddSignalR(options =>
-    options.EnableDetailedErrors = builder.Environment.IsDevelopment());
+{
+    options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+    options.MaximumReceiveMessageSize = 32 * 1024;
+    options.MaximumParallelInvocationsPerClient = 1;
+    options.AddFilter<RealtimeAbuseFilter>();
+});
 builder.Services.AddSingleton<Microsoft.AspNetCore.SignalR.IUserIdProvider, ChatUserIdProvider>();
 builder.Services.AddSingleton<WorkshopPresenceTracker>();
 builder.Services.AddSingleton<IdeasSelectionTracker>();
@@ -73,7 +89,7 @@ var app = builder.Build();
 
 app.UseForwardedHeaders();
 
-app.UseExceptionHandler();
+app.UseExceptionHandler(new ExceptionHandlerOptions {StatusCodeSelector = RequestSecurity.ExceptionStatusCode});
 app.UseStatusCodePages(async context =>
 {
     var problemDetailsService =
@@ -97,13 +113,13 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseCors("Frontend");
-app.UseRateLimiter();
-
+app.UseMiddleware<BrowserRequestSecurityMiddleware>();
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<WorkshopHub>("/hubs/workshop");
-app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<WorkshopHub>("/hubs/workshop", options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

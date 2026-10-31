@@ -11,7 +11,9 @@ using DevHub.Domain.Chats;
 namespace DevHub.Infrastructure.Persistence;
 
 public sealed class ApplicationDbContext(
-    DbContextOptions<ApplicationDbContext> options)
+    DbContextOptions<ApplicationDbContext> options,
+    Microsoft.Extensions.Options.IOptions<DevHub.Application.Workshops.WorkshopLimits>? workshopOptions = null,
+    TimeProvider? timeProvider = null)
     : DbContext(options), IUnitOfWork
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -46,12 +48,29 @@ public sealed class ApplicationDbContext(
     public DbSet<ChatParticipant> ChatParticipants => Set<ChatParticipant>();
 
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<DevHub.Domain.Notifications.UserNotification> UserNotifications => Set<DevHub.Domain.Notifications.UserNotification>();
 
     public override async Task<int> SaveChangesAsync(
         CancellationToken cancellationToken = default)
     {
         try
         {
+            // Apply the fan-out budget to every notification producer, including assignments.
+            // Suppressing excess activity notices must not discard the underlying user action.
+            var notifications = ChangeTracker.Entries<DevHub.Domain.Notifications.UserNotification>()
+                .Where(entry => entry.State == EntityState.Added).ToArray();
+            if (notifications.Length > 0 && Database.IsSqlServer())
+            {
+                var usage = new DevHub.Infrastructure.Workshops.WorkshopUsage(options, timeProvider ?? TimeProvider.System);
+                var limits = workshopOptions?.Value ?? new();
+                foreach (var group in notifications.GroupBy(entry => entry.Entity.ActorUserId == Guid.Empty
+                    ? $"notify-public:{entry.Entity.OrganizationId:N}" : $"notify-user:{entry.Entity.ActorUserId:N}"))
+                {
+                    var ordered = group.OrderByDescending(entry => entry.Entity.Kind == DevHub.Domain.Notifications.UserNotification.TaskAssigned).ToArray();
+                    var granted = await usage.Take(group.Key, limits.NotificationsPerMinute, ordered.Length, TimeSpan.FromMinutes(1), cancellationToken);
+                    foreach (var excess in ordered.Skip(granted)) excess.State = EntityState.Detached;
+                }
+            }
             return await base.SaveChangesAsync(cancellationToken);
         }
         catch (DbUpdateConcurrencyException exception)

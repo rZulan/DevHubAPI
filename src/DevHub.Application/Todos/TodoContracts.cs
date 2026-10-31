@@ -5,23 +5,25 @@ using DevHub.Domain.Todos;
 namespace DevHub.Application.Todos;
 
 public sealed record CreateTodoRequest([Required, StringLength(150)] string Name,
-    [StringLength(2000)] string? Description, DateOnly? TargetDate);
+    [StringLength(2000)] string? Description, DateOnly? TargetDate, DateOnly? StartDate = null);
+public sealed record UpdateTodoDatesRequest(DateOnly? TargetDate, DateOnly? StartDate, int BoardRevision);
 public sealed record CreateTodoTaskRequest([Required, StringLength(150)] string Title,
-    [StringLength(2000)] string? Description, [Required, StringLength(20)] string Status, Guid? AssigneeId = null, IReadOnlyList<Guid>? AssigneeIds = null);
+    [StringLength(2000)] string? Description, [Required, StringLength(20)] string Status, Guid? AssigneeId = null, IReadOnlyList<Guid>? AssigneeIds = null, DateOnly? TargetDate = null, DateOnly? StartDate = null);
 public sealed record AssignTodoTaskRequest(Guid? AssigneeId);
 public sealed record ChangeTodoTaskAssigneeRequest(Guid UserId, bool Remove = false);
 public sealed record ConfigureTodoColumnsRequest([Required] IReadOnlyList<TodoColumn> Columns, int BoardRevision);
 public sealed record MoveTodoTaskRequest([Required, StringLength(20)] string Status);
 public sealed record UpdateTodoTaskRequest([Required, StringLength(150)] string Title,
     [StringLength(2000)] string? Description, [Required, StringLength(20)] string Status,
-    [Required] IReadOnlyList<Guid> AssigneeIds, int BoardRevision);
+    [Required] IReadOnlyList<Guid> AssigneeIds, int BoardRevision, DateOnly? TargetDate = null, DateOnly? StartDate = null);
 public sealed record DeleteTodoTaskRequest(int BoardRevision);
-public sealed record TodoTaskResponse(Guid Id, Guid TodoId, Guid ProjectId, string Title, string Description, string Status, Guid? AssigneeId, IReadOnlyList<Guid> AssigneeIds);
+public sealed record TodoTaskResponse(Guid Id, Guid TodoId, Guid ProjectId, string Title, string Description, string Status, Guid? AssigneeId, IReadOnlyList<Guid> AssigneeIds, DateOnly? TargetDate = null, DateOnly? StartDate = null);
 public sealed record TodoResponse(Guid Id, Guid ProjectId, string Name, string Description, DateOnly? TargetDate,
-    DateTimeOffset CreatedAtUtc, IReadOnlyList<TodoTaskResponse> Tasks, IReadOnlyList<TodoColumn> Columns, int BoardRevision);
+    DateTimeOffset CreatedAtUtc, IReadOnlyList<TodoTaskResponse> Tasks, IReadOnlyList<TodoColumn> Columns, int BoardRevision, DateOnly? StartDate = null);
 
 public interface ITodoService
 {
+    Task<Result<TodoResponse>> UpdateDates(Guid organizationId, Guid projectId, Guid todoId, Guid userId, UpdateTodoDatesRequest request, CancellationToken ct);
     Task<Result<TodoTaskResponse>> UpdateTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, Guid userId, UpdateTodoTaskRequest request, CancellationToken ct);
     Task<Result<bool>> DeleteTask(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, Guid userId, DeleteTodoTaskRequest request, CancellationToken ct);
     Task<Result<TodoResponse>> ConfigureColumns(Guid organizationId, Guid projectId, Guid todoId, Guid userId, ConfigureTodoColumnsRequest request, CancellationToken ct);

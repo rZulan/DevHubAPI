@@ -46,6 +46,7 @@ public sealed class TeamsController(ISender sender, WorkshopRealtime realtime) :
     }
 
     [HttpPost]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("resource-create")]
     [EndpointName("CreateTeam")]
     [ProducesResponseType<TeamResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -98,6 +99,18 @@ public sealed class TeamsController(ISender sender, WorkshopRealtime realtime) :
                 request.Name,
                 request.Description),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPut("{teamId:guid}/avatar")]
+    [EndpointName("SetTeamAvatar")]
+    [RequestSizeLimit(200000)]
+    [ProducesResponseType<TeamResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetAvatar(Guid organizationId, Guid teamId, [FromBody] SaveAvatarRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new SetTeamAvatarCommand(organizationId, teamId, userId, request.AvatarUrl), cancellationToken);
         if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }

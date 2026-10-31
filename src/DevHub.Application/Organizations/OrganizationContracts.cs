@@ -13,7 +13,11 @@ public sealed record OrganizationResponse(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
     int MemberCount,
-    int TeamCount);
+    int TeamCount,
+    string? AvatarUrl = null);
+
+public sealed record SetOrganizationAvatarCommand(Guid OrganizationId, Guid RequestingUserId, [property: AvatarImage] string? AvatarUrl)
+    : IRequest<Result<OrganizationResponse>>;
 
 public sealed record OrganizationRoleResponse(
     Guid Id,
@@ -119,7 +123,7 @@ public sealed record RemoveOrganizationRoleCommand(
     Guid UserId,
     Guid RequestingUserId) : IRequest<Result<Unit>>;
 
-public sealed record PromoteOrganizationOwnerCommand(
+public sealed record TransferOrganizationOwnershipCommand(
     Guid OrganizationId,
     Guid UserId,
     Guid RequestingUserId) : IRequest<Result<Unit>>;

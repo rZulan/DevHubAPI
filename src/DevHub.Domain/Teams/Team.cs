@@ -31,6 +31,7 @@ public sealed class Team : BaseEntity
     public string Name { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? Description { get; private set; }
+    public string? AvatarUrl { get; private set; }
     public Organization Organization { get; private set; } = null!;
     public IReadOnlyCollection<TeamMember> Members => _members;
 
@@ -51,6 +52,13 @@ public sealed class Team : BaseEntity
         SetDetails(name, description);
         LeaderUserId = leaderUserId;
         AddMember(leaderUserId, updatedAtUtc);
+        MarkUpdated(updatedAtUtc);
+    }
+
+    public void SetAvatar(string? avatarUrl, DateTimeOffset updatedAtUtc)
+    {
+        if (!AvatarImage.IsValid(avatarUrl)) throw new ArgumentException("Invalid avatar image.", nameof(avatarUrl));
+        AvatarUrl = avatarUrl;
         MarkUpdated(updatedAtUtc);
     }
 

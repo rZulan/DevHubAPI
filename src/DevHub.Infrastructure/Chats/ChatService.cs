@@ -10,7 +10,8 @@ namespace DevHub.Infrastructure.Chats;
 internal sealed class ChatService(
     ApplicationDbContext dbContext,
     IChatMessageCipher cipher,
-    TimeProvider timeProvider) : IChatService
+    TimeProvider timeProvider,
+    DevHub.Application.Workshops.WorkshopLimits limits) : IChatService
 {
     private const int MaximumMessageLength = 4000;
     private const int MaximumGroupNameLength = 150;
@@ -178,6 +179,8 @@ internal sealed class ChatService(
         {
             errors[nameof(body)] = [$"A message between 1 and {MaximumMessageLength} characters is required."];
         }
+        if (body is not null && System.Text.RegularExpressions.Regex.Matches(body, @"(?<![\w@])@[\p{L}\p{N}_-]+").Count > limits.MaximumMentions)
+            errors[nameof(body)] = [$"Use at most {limits.MaximumMentions} @mentions in one message."];
         if (errors.Count > 0)
         {
             return Result<ChatDeliveryResponse>.Failure(ChatErrors.Invalid(errors));
@@ -200,7 +203,7 @@ internal sealed class ChatService(
         }
         else
         {
-            var encrypted = cipher.Encrypt(body.Trim());
+            var encrypted = cipher.Encrypt(body!.Trim());
             message = ChatMessage.Create(
                 conversationId,
                 requestingUserId,

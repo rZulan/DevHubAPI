@@ -59,9 +59,9 @@ internal static class OrganizationSettingsChecks
         Check(all.IsSuccess && all.Value!.Count == 1,"owner sees remaining active invitations");
         Check(!System.Text.Json.JsonSerializer.Serialize(all.Value).Contains("owner-hash"),"invite metadata never exposes token hashes");
         Check((await sender.Send(new RevokeOrganizationInviteCommand(organization.Id,invites[0].Id,owner))).IsSuccess,"owner can revoke any active link");
-        Check(!(await sender.Send(new AcceptOrganizationInviteCommand("anything",joiningUser.Id))).IsSuccess,"revoked links cannot be accepted");
+        Check(!(await sender.Send(new AcceptOrganizationInviteCommand(new string('a',64),joiningUser.Id))).IsSuccess,"revoked links cannot be accepted");
         invites[0] = OrganizationInvite.Create(organization.Id,member,"new-hash",now.AddDays(7),now);
-        Check(!(await sender.Send(new AcceptOrganizationInviteCommand("anything",joiningUser.Id))).IsSuccess,"links from creators without invite access are invalid");
+        Check(!(await sender.Send(new AcceptOrganizationInviteCommand(new string('a',64),joiningUser.Id))).IsSuccess,"links from creators without invite access are invalid");
         managerRole.Update(managerRole.Name, managerRole.Color, managerRole.Position, [OrganizationPermissions.ManageInvites], now);
         invites[0] = OrganizationInvite.Create(organization.Id,owner,"managed-hash",now.AddDays(7),now);
         Check(organization.HasPermission(manager, OrganizationPermissions.CreateInvites), "Manage invites includes invitation creation");

@@ -25,6 +25,14 @@ public sealed class TodosController(ITodoService todos, IHubContext<WorkshopHub>
         if (result.IsSuccess) await Changed(organizationId, projectId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
+    [HttpPatch("{todoId:guid}/dates")]
+    public async Task<IActionResult> UpdateDates(Guid organizationId, Guid projectId, Guid todoId, UpdateTodoDatesRequest request, CancellationToken ct)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await todos.UpdateDates(organizationId, projectId, todoId, userId, request, ct);
+        if (result.IsSuccess) await Changed(organizationId, projectId);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
     [HttpPatch("{todoId:guid}/tasks/{taskId:guid}/assignees")]
     public async Task<IActionResult> ChangeAssignee(Guid organizationId, Guid projectId, Guid todoId, Guid taskId, ChangeTodoTaskAssigneeRequest request, CancellationToken ct)
     {
@@ -48,11 +56,13 @@ public sealed class TodosController(ITodoService todos, IHubContext<WorkshopHub>
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
     [HttpGet]
-    public async Task<IActionResult> List(Guid organizationId, Guid projectId, CancellationToken ct)
+    public async Task<IActionResult> List(Guid organizationId, Guid projectId, CancellationToken ct, [FromQuery] int page = 0, [FromQuery] int take = 50)
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
-        var result = await todos.List(organizationId, projectId, userId, ct);
-        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+        var result = await todos.ListPage(organizationId, projectId, userId, page, ct, take);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        Response.Headers["X-Has-More"] = result.Value!.HasMore ? "true" : "false";
+        return Ok(result.Value.Items);
     }
     [HttpPost]
     public async Task<IActionResult> Create(Guid organizationId, Guid projectId, CreateTodoRequest request, CancellationToken ct)

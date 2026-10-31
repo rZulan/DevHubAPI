@@ -1,3 +1,5 @@
+using System.Text.Json;
+using DevHub.Application.Notifications;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Application.Organizations;
@@ -137,6 +139,7 @@ internal static class ProjectValidation
 internal sealed class CreateProjectCommandHandler(
     IOrganizationRepository organizationRepository,
     IProjectRepository projectRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : IRequestHandler<CreateProjectCommand, Result<ProjectResponse>>
@@ -207,6 +210,7 @@ internal sealed class CreateProjectCommandHandler(
 
         try
         {
+            await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "project-created", project.Name, project.Id, project.Id, project.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (UniqueConstraintViolationException)
@@ -234,6 +238,7 @@ internal sealed class CreateProjectCommandHandler(
 internal sealed class UpdateProjectCommandHandler(
     IOrganizationRepository organizationRepository,
     IProjectRepository projectRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : IRequestHandler<UpdateProjectCommand, Result<ProjectResponse>>
@@ -299,6 +304,7 @@ internal sealed class UpdateProjectCommandHandler(
         }
 
         ProjectMappings.TryParseStatus(request.Status, out var status);
+        var previous = JsonSerializer.Serialize(project.ToResponse() with {UpdatedAtUtc = null});
         project.Update(
             team.Id,
             request.LeadUserId,
@@ -319,6 +325,8 @@ internal sealed class UpdateProjectCommandHandler(
 
         try
         {
+            if (previous != JsonSerializer.Serialize(project.ToResponse() with {UpdatedAtUtc = null}))
+                await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "project-updated", project.Name, project.Id, project.Id, project.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (UniqueConstraintViolationException)
@@ -346,6 +354,7 @@ internal sealed class UpdateProjectCommandHandler(
 internal sealed class DeleteProjectCommandHandler(
     IOrganizationRepository organizationRepository,
     IProjectRepository projectRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork)
     : IRequestHandler<DeleteProjectCommand, Result<Unit>>
 {
@@ -378,6 +387,7 @@ internal sealed class DeleteProjectCommandHandler(
         }
 
         projectRepository.Remove(project);
+        await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "project-deleted", project.Name, project.Id, project.Id, project.Id, ProjectDeleted: true), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<Unit>.Success(Unit.Value);
     }

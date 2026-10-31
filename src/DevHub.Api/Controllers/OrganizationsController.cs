@@ -13,6 +13,8 @@ public sealed record SaveOrganizationRequest(
     [Required, StringLength(150)] string Name,
     [StringLength(1000)] string? Description);
 
+public sealed record SaveAvatarRequest([DevHub.Application.Common.AvatarImage] string? AvatarUrl);
+
 public sealed record SaveOrganizationRoleRequest(
     [Required, StringLength(100)] string Name,
     [Required, StringLength(20)] string Color,
@@ -67,6 +69,7 @@ public sealed class OrganizationsController(
     }
 
     [HttpPost]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("resource-create")]
     [EndpointName("CreateOrganization")]
     [ProducesResponseType<OrganizationResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
@@ -106,6 +109,18 @@ public sealed class OrganizationsController(
                 request.Name,
                 request.Description),
             cancellationToken);
+        if (result.IsSuccess) await realtime.Changed(organizationId);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/avatar")]
+    [EndpointName("SetOrganizationAvatar")]
+    [RequestSizeLimit(200000)]
+    [ProducesResponseType<OrganizationResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetAvatar(Guid organizationId, [FromBody] SaveAvatarRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new SetOrganizationAvatarCommand(organizationId, userId, request.AvatarUrl), cancellationToken);
         if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
@@ -197,6 +212,7 @@ public sealed class OrganizationsController(
     }
 
     [HttpPost("{organizationId:guid}/invites")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("invite-action")]
     [EndpointName("CreateOrganizationInvite")]
     [ProducesResponseType<OrganizationInviteResponse>(StatusCodes.Status201Created)]
     public async Task<IActionResult> CreateInvite(
@@ -230,6 +246,7 @@ public sealed class OrganizationsController(
     }
 
     [HttpPost("invites/{token}/accept")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("invite-action")]
     [EndpointName("AcceptOrganizationInvite")]
     [ProducesResponseType<OrganizationResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> AcceptInvite(
@@ -378,14 +395,14 @@ public sealed class OrganizationsController(
     }
 
     [HttpPut("{organizationId:guid}/owners/{memberUserId:guid}")]
-    [EndpointName("PromoteOrganizationOwner")]
-    public async Task<IActionResult> PromoteOwner(
+    [HttpPut("{organizationId:guid}/ownership/{memberUserId:guid}", Name = "TransferOrganizationOwnership")]
+    public async Task<IActionResult> TransferOwnership(
         Guid organizationId,
         Guid memberUserId,
         CancellationToken cancellationToken)
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
-        var result = await sender.Send(new PromoteOrganizationOwnerCommand(
+        var result = await sender.Send(new TransferOrganizationOwnershipCommand(
             organizationId, memberUserId, userId), cancellationToken);
         if (result.IsSuccess) await realtime.Changed(organizationId);
         return result.IsSuccess ? NoContent() : Failure(result.Error!);

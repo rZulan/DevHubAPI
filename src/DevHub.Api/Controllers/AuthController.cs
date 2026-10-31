@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.RateLimiting;
 using DevHub.Application.Authentication;
 using DevHub.Application.Authentication.Commands.Login;
 using DevHub.Application.Authentication.Commands.Logout;
@@ -40,6 +41,8 @@ public sealed class AuthController(
     /// <response code="400">One or more registration fields are invalid.</response>
     /// <response code="409">An account already uses the supplied email address.</response>
     [HttpPost("register")]
+    [EnableRateLimiting("auth-register")]
+    [RequestSizeLimit(16 * 1024)]
     [EndpointName("RegisterUser")]
     [AllowAnonymous]
     [ProducesResponseType<AuthenticationResponse>(StatusCodes.Status201Created)]
@@ -73,6 +76,8 @@ public sealed class AuthController(
     /// <response code="400">The request body could not be validated.</response>
     /// <response code="401">The email address or password is invalid.</response>
     [HttpPost("login")]
+    [EnableRateLimiting("auth-login")]
+    [RequestSizeLimit(16 * 1024)]
     [EndpointName("LoginUser")]
     [AllowAnonymous]
     [ProducesResponseType<AuthenticationResponse>(StatusCodes.Status200OK)]
@@ -106,6 +111,8 @@ public sealed class AuthController(
     /// <response code="400">The request body could not be validated.</response>
     /// <response code="401">The refresh token is invalid, expired, or revoked.</response>
     [HttpPost("refresh")]
+    [EnableRateLimiting("auth-refresh")]
+    [RequestSizeLimit(16 * 1024)]
     [EndpointName("RefreshAccessToken")]
     [AllowAnonymous]
     [ProducesResponseType<AuthenticationResponse>(StatusCodes.Status200OK)]
@@ -135,8 +142,8 @@ public sealed class AuthController(
     /// Logout
     /// </summary>
     /// <remarks>
-    /// Clears the authentication cookie. This operation does not revoke previously issued
-    /// JWT access tokens or refresh tokens.
+    /// Revokes the current refresh-token family and clears the session cookies.
+    /// Previously issued access tokens remain valid until their short expiration.
     /// </remarks>
     /// <returns>No response body.</returns>
     /// <response code="204">The authentication cookie was cleared.</response>
@@ -314,8 +321,8 @@ public sealed class AuthController(
         var properties = new AuthenticationProperties
         {
             IsPersistent = true,
-            AllowRefresh = true,
-            ExpiresUtc = response.RefreshTokenExpiresAtUtc
+            AllowRefresh = false,
+            ExpiresUtc = response.AccessTokenExpiresAtUtc
         };
 
         WriteRefreshTokenCookie(response);

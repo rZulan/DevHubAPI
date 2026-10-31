@@ -4,3 +4,9 @@
 *.user
 *.suo
 .deploy/
+.env
+.env.*
+!.env.example
+**/appsettings.Production.json
+**/appsettings.*.local.json
+*.dpapi

@@ -20,16 +20,16 @@ internal sealed class LoginCommandHandler(
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Email) ||
-            string.IsNullOrWhiteSpace(request.Password))
+            request.Email.Length > 320 || string.IsNullOrWhiteSpace(request.Password) || request.Password.Length > 128)
         {
             return Result<AuthenticationResponse>.Failure(AuthenticationErrors.InvalidCredentials);
         }
 
         var user = await userRepository.GetByEmailAsync(request.Email, cancellationToken);
 
-        if (user is null ||
-            !user.HasPassword ||
-            !passwordHasher.Verify(user.PasswordHash!, request.Password))
+        // Missing/passwordless accounts still perform a password hash verification.
+        var verified = passwordHasher.Verify(user?.PasswordHash ?? string.Empty, request.Password);
+        if (user is null || !user.HasPassword || !verified)
         {
             return Result<AuthenticationResponse>.Failure(AuthenticationErrors.InvalidCredentials);
         }

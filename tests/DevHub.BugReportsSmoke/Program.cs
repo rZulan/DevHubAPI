@@ -11,6 +11,7 @@ using DevHub.Application;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.BugReports;
 using DevHub.Domain.Organizations;
+using DevHub.Domain.Projects;
 using DevHub.Domain.Users;
 using DevHub.Infrastructure;
 using DevHub.Infrastructure.BugReports;
@@ -76,11 +77,18 @@ Check(!portal.Enabled && portal.Token == "", "Public reporting starts disabled w
 portal = await Read<BugPortalResponse>(await Send(HttpMethod.Put, path + "/portal", new {enabled = true, rotate = false, revision = portal.Revision}, owner));
 var publicPath = $"/api/public/bug-reports/{portal.Token}";
 Check(portal.Enabled && portal.Token.Length == 64, "Enabling creates an unguessable public token");
+Check(portal.ShortCode?.Length == 14 && BugPortalLink.LookupToken(portal.ShortCode) == portal.Token[..20], "Portal settings expose a compact URL-safe code for existing tokens");
+Check(BugPortalLink.ShortCode("00112233445566778899" + new string('a', 44)) == "ABEiM0RVZneImQ", "Short links have a stable URL-safe format");
+var shortPublicPath = $"/api/public/bug-reports/{portal.ShortCode}";
 var category = await Read<BugCategoryResponse>(await Send(HttpMethod.Post, path + "/categories", new {name = "Interface", archived = false}, owner));
 Check((await Send(HttpMethod.Post, path + "/categories", new {name = " interface ", archived = false}, owner)).StatusCode == HttpStatusCode.BadRequest, "Duplicate categories rejected without a server error");
 var publicResponse = await Send(HttpMethod.Get, publicPath); var publicJson = await Read<JsonElement>(publicResponse);
 Check(publicJson.EnumerateObject().Select(p => p.Name).Order().SequenceEqual(new[] {"categories", "projectName"}), "Public form exposes only project name and available categories");
 Check(publicJson.GetProperty("categories")[0].GetProperty("id").GetGuid() == category.Id, "Project categories appear on the anonymous form");
+var shortForm = await Read<JsonElement>(await Send(HttpMethod.Get, shortPublicPath));
+Check(shortForm.GetRawText() == publicJson.GetRawText(), "Short and full links load the same public form without private data");
+foreach (var invalid in new[] {"short", "abcdefghijklmn!", "ABEiM0RVZneImR", "AAAAAAAAAAAAAAAAAAAA"})
+    Check((await Send(HttpMethod.Get, $"/api/public/bug-reports/{invalid}")).StatusCode == HttpStatusCode.NotFound, "Malformed and noncanonical short links are unavailable");
 var image = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1kAAAAASUVORK5CYII=");
 MultipartFormDataContent Form(Guid? submissionId = null, Guid? categoryId = null, string email = "tester@example.test", string fileName = "screenshot.png", byte[]? bytes = null)
 {
@@ -89,10 +97,10 @@ MultipartFormDataContent Form(Guid? submissionId = null, Guid? categoryId = null
     form.Add(new ByteArrayContent(bytes ?? image), "files", fileName); return form;
 }
 var submissionId = Guid.NewGuid();
-var receipt = await Read<BugReceipt>(await Send(HttpMethod.Post, publicPath, body: Form(submissionId)), 201);
+var receipt = await Read<BugReceipt>(await Send(HttpMethod.Post, shortPublicPath, body: Form(submissionId)), 201);
 Check(receipt.Reference.StartsWith("BUG-"), "Anonymous multipart report accepted using email without a DevHub account");
 var retry = await Read<BugReceipt>(await Send(HttpMethod.Post, publicPath, body: Form(submissionId)), 201);
-Check(retry.Reference == receipt.Reference, "Retrying a submission does not create a duplicate report");
+Check(retry.Reference == receipt.Reference, "Retrying across short and full links does not create a duplicate report");
 Check((await Send(HttpMethod.Post, publicPath, body: Form(email: "bad email"))).StatusCode == HttpStatusCode.BadRequest, "Malformed email rejected");
 Check((await Send(HttpMethod.Post, publicPath, body: Form(fileName: "fake.png", bytes: Encoding.UTF8.GetBytes("not an image")))).StatusCode == HttpStatusCode.BadRequest, "Spoofed image content rejected");
 Check((await Send(HttpMethod.Post, publicPath, body: Form(fileName: "program.exe"))).StatusCode == HttpStatusCode.BadRequest, "Unsupported executable attachment rejected");
@@ -134,13 +142,26 @@ category = await Read<BugCategoryResponse>(await Send(HttpMethod.Put, path + $"/
 Check((await Read<PublicBugFormResponse>(await Send(HttpMethod.Get, publicPath))).Categories.Single().Name == "User interface", "Renamed categories can be restored without changing their identity");
 portal = await Read<BugPortalResponse>(await Send(HttpMethod.Put, path + "/portal", new {enabled = false, rotate = false, revision = portal.Revision}, owner));
 Check((await Send(HttpMethod.Get, publicPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Post, publicPath, body: Form())).StatusCode == HttpStatusCode.NotFound, "Disabling a link blocks both form loading and submissions");
+Check((await Send(HttpMethod.Get, shortPublicPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Post, shortPublicPath, body: Form())).StatusCode == HttpStatusCode.NotFound, "Disabling a portal also blocks short-link reads and submissions");
 Check((await Send(HttpMethod.Get, path + $"/{report.Id}", user: owner)).IsSuccessStatusCode, "Disabling public access preserves the private inbox");
 Check((await Send(HttpMethod.Post, path, user: owner, body: Form(fileName: "browser.log", bytes: Encoding.UTF8.GetBytes("Error: button handler failed")))).StatusCode == HttpStatusCode.Created, "Team reports with log attachments work while the public link is disabled");
 portal = await Read<BugPortalResponse>(await Send(HttpMethod.Put, path + "/portal", new {enabled = true, rotate = true, revision = portal.Revision}, owner));
 Check((await Send(HttpMethod.Get, publicPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Get, $"/api/public/bug-reports/{portal.Token}")).IsSuccessStatusCode, "Replacing a public link invalidates the old URL");
-for (var i = 0; i < 10; i++) Check((await Send(HttpMethod.Post, $"/api/public/bug-reports/{portal.Token}", body: Form(), address: "127.0.2.250")).StatusCode == HttpStatusCode.Created, $"Rate limiter permits request {i + 1}");
-var limited = await Send(HttpMethod.Post, $"/api/public/bug-reports/{portal.Token}", body: Form(), address: "127.0.2.250");
+var currentShortPath = $"/api/public/bug-reports/{portal.ShortCode}";
+Check((await Send(HttpMethod.Get, shortPublicPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Post, shortPublicPath, body: Form())).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Get, currentShortPath)).IsSuccessStatusCode, "Replacing the public link retires its short version too");
+for (var i = 0; i < 10; i++) Check((await Send(HttpMethod.Post, i % 2 == 0 ? currentShortPath : $"/api/public/bug-reports/{portal.Token}", body: Form(), address: "127.0.2.250")).StatusCode == HttpStatusCode.Created, $"Rate limiter permits request {i + 1}");
+var limited = await Send(HttpMethod.Post, currentShortPath, body: Form(), address: "127.0.2.250");
 Check(limited.StatusCode == HttpStatusCode.TooManyRequests && limited.Headers.RetryAfter is not null, "Public submission throttling returns 429 with a retry interval");
 Check(BugFileValidation.SafeName("..\\secret/screenshot.png") == "screenshot.png" && BugFileValidation.ContentType("binary.txt", [0, 1, 2]) is null, "Attachment names are sanitized and binary content cannot masquerade as text");
+await using (var collision = app.Services.CreateAsyncScope())
+{
+    var db = collision.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    var project = await db.Projects.SingleAsync(p => p.Id == projectId);
+    var other = Project.Create(orgId, project.TeamId, owner, "Prefix collision", "Test-only", ProjectStatus.Planning, [], null, null, null, null, null, null, [], null, null, DateTimeOffset.UtcNow);
+    var colliding = BugReportPortal.Create(other.Id, portal.Token[..63] + (portal.Token[^1] == 'a' ? "b" : "a")); colliding.Update(false);
+    db.Projects.Add(other); db.BugReportPortals.Add(colliding); await db.SaveChangesAsync();
+}
+Check((await Send(HttpMethod.Get, currentShortPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Post, currentShortPath, body: Form())).StatusCode == HttpStatusCode.NotFound, "Ambiguous prefixes never open or submit to another project, including disabled portals");
+Check((await Send(HttpMethod.Get, $"/api/public/bug-reports/{portal.Token}")).IsSuccessStatusCode, "The full link still works if a short prefix is ambiguous");
 await app.StopAsync();
 Console.WriteLine("Bug report HTTP and SQL checks completed; disposable database will be removed.");

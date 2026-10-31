@@ -20,6 +20,7 @@ public sealed class IdeasController(IIdeasService ideas, IHubContext<WorkshopHub
     }
 
     [HttpPut]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("workshop-save")]
     [RequestSizeLimit(8_000_000)]
     public async Task<IActionResult> Save(Guid organizationId, Guid projectId, SaveIdeasRequest request, CancellationToken ct)
     {

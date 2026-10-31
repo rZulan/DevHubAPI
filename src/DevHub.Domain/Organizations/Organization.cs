@@ -29,6 +29,7 @@ public sealed class Organization : BaseEntity
     public string Name { get; private set; } = string.Empty;
     public string NormalizedName { get; private set; } = string.Empty;
     public string? Description { get; private set; }
+    public string? AvatarUrl { get; private set; }
     public string? DashboardLayoutJson { get; private set; }
     public DateTimeOffset? DashboardPublishedAtUtc { get; private set; }
     public IReadOnlyCollection<OrganizationMember> Members => _members;
@@ -65,6 +66,13 @@ public sealed class Organization : BaseEntity
         MarkUpdated(updatedAtUtc);
     }
 
+    public void SetAvatar(string? avatarUrl, DateTimeOffset updatedAtUtc)
+    {
+        if (!AvatarImage.IsValid(avatarUrl)) throw new ArgumentException("Invalid avatar image.", nameof(avatarUrl));
+        AvatarUrl = avatarUrl;
+        MarkUpdated(updatedAtUtc);
+    }
+
     public void PublishDashboard(string dashboardLayoutJson, DateTimeOffset publishedAtUtc)
     {
         DashboardLayoutJson = dashboardLayoutJson;
@@ -75,14 +83,14 @@ public sealed class Organization : BaseEntity
     public bool HasMember(Guid userId) => _members.Any(member => member.UserId == userId);
 
     public bool IsOwner(Guid userId) =>
-        _members.Any(member => member.UserId == userId && member.IsOwner);
+        OwnerUserId == userId && HasMember(userId);
 
     public bool HasPermission(Guid userId, string permission)
     {
         if (IsOwner(userId)) return true;
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
         return member is not null && member.RoleAssignments.Any(assignment =>
-            _roles.SingleOrDefault(role => role.Id == assignment.RoleId)?.HasPermission(permission) == true);
+            _roles.SingleOrDefault(role => role.Id == assignment.RoleId) is {IsOwnerRole: false} role && role.HasPermission(permission));
     }
 
     public int HighestRolePosition(Guid userId)
@@ -90,6 +98,7 @@ public sealed class Organization : BaseEntity
         if (IsOwner(userId)) return 0;
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
         return member?.RoleAssignments
+            .Where(assignment => !_roles.Any(role => role.Id == assignment.RoleId && role.IsOwnerRole))
             .Select(assignment => _roles.SingleOrDefault(role => role.Id == assignment.RoleId)?.Position ?? int.MaxValue)
             .DefaultIfEmpty(int.MaxValue)
             .Min() ?? int.MaxValue;
@@ -174,7 +183,7 @@ public sealed class Organization : BaseEntity
     {
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
         var role = _roles.SingleOrDefault(candidate => candidate.Id == roleId);
-        return member is not null && role is not null && member.AssignRole(roleId, assignedAtUtc);
+        return member is not null && role is not null && !role.IsOwnerRole && member.AssignRole(roleId, assignedAtUtc);
     }
 
     public bool RemoveRole(Guid userId, Guid roleId)
@@ -193,20 +202,25 @@ public sealed class Organization : BaseEntity
         return true;
     }
 
-    public bool PromoteOwner(Guid userId, DateTimeOffset assignedAtUtc)
+    public bool TransferOwnership(Guid requestingUserId, Guid userId, DateTimeOffset assignedAtUtc)
     {
         var member = _members.SingleOrDefault(candidate => candidate.UserId == userId);
         var ownerRole = _roles.Single(role => role.IsOwnerRole);
-        if (member is null || member.IsOwner) return false;
+        if (!IsOwner(requestingUserId) || requestingUserId == userId || member is null) return false;
+        foreach (var candidate in _members)
+        {
+            candidate.SetOwner(false);
+            if (candidate.UserId != userId) candidate.RemoveRole(ownerRole.Id);
+        }
         member.SetOwner(true);
         member.AssignRole(ownerRole.Id, assignedAtUtc);
+        OwnerUserId = userId;
+        MarkUpdated(assignedAtUtc);
         return true;
     }
 
-    public bool CanOwnerLeave(Guid userId) =>
-        IsOwner(userId) && _members.Count(member => member.IsOwner) > 1;
-
     public bool CanAssignRole(Guid requestingUserId, Guid targetUserId, OrganizationRole role) =>
+        !role.IsOwnerRole &&
         HasMember(targetUserId) &&
         requestingUserId != targetUserId &&
         CanManageRole(requestingUserId, role) &&
@@ -215,8 +229,7 @@ public sealed class Organization : BaseEntity
 
     public bool RemoveMember(Guid userId, DateTimeOffset removedAtUtc)
     {
-        var leavingOwner = IsOwner(userId);
-        if (leavingOwner && !CanOwnerLeave(userId))
+        if (IsOwner(userId))
         {
             return false;
         }
@@ -227,25 +240,14 @@ public sealed class Organization : BaseEntity
             return false;
         }
 
-        var replacementOwner = leavingOwner
-            ? _members.First(member => member.IsOwner && member.UserId != userId)
-            : null;
-        if (!leavingOwner && _teams.Any(team => team.IsLeader(userId))) return false;
+        if (_teams.Any(team => team.IsLeader(userId))) return false;
 
         foreach (var team in _teams)
         {
-            if (team.IsLeader(userId) && replacementOwner is not null)
-            {
-                team.Update(team.Name, team.Description, replacementOwner.UserId, removedAtUtc);
-            }
             team.RemoveMember(userId);
         }
 
         _members.Remove(member);
-        if (OwnerUserId == userId)
-        {
-            OwnerUserId = _members.First(candidate => candidate.IsOwner).UserId;
-        }
         return true;
     }
 

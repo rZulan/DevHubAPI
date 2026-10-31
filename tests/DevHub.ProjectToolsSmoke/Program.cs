@@ -16,6 +16,7 @@ NotesChecks.Run();
 WikiChecks.Run();
 RoadmapChecks.Run();
 DesignChecks.Run();
+CalendarChecks.Run();
 if (args.Contains("--schema-only")) return;
 var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src/DevHub.Api"))
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
@@ -35,6 +36,7 @@ await CollaborationChecks.Run();
 JsonElement Json(string json) => JsonSerializer.Deserialize<JsonElement>(json);
 var documents = new Dictionary<string, JsonElement>
 {
+    ["calendar"] = Json("""{"timeZone":"Asia/Manila","events":[{"id":"milestone","title":"Release","description":"Ship","kind":"milestone","startDate":"2026-10-28","endDate":"2026-10-28","allDay":true,"startTime":"","endTime":""}]}"""),
     ["erd"] = Json("""
     {"tables":[{"id":"t1","name":"users","x":10,"y":20,"fields":[{"id":"f1","name":"id","type":"UUID","length":"","primary":true,"nullable":false,"unique":false,"defaultValue":""}]},{"id":"t2","name":"orders","x":400,"y":200,"fields":[{"id":"f2","name":"user_id","type":"UUID","length":"","primary":false,"nullable":false,"unique":false,"defaultValue":""}]}],"relationships":[{"id":"r1","fromTable":"t1","fromField":"f1","toTable":"t2","toField":"f2","cardinality":"1:N","onDelete":"CASCADE"}]}
     """),
@@ -43,7 +45,7 @@ var documents = new Dictionary<string, JsonElement>
     """),
     ["sdlc"] = Json("""{"model":"waterfall","currentPhase":2,"completed":false,"notes":{"implementation":"Building the project"}}"""),
     ["notes"] = Json("""{"notes":[{"id":"note-1","title":"Next release","body":"Review onboarding","color":"#f6e7a6","updatedAt":"2026-10-20T00:00:00.000Z"}]}"""),
-    ["wiki"] = Json("""{"homePageId":"home","pages":[{"id":"home","slug":"home","title":"Home","body":"# Welcome","message":"Create home","authorId":"member","updatedAt":"2026-10-26T05:00:00.000Z","history":[{"id":"version-1","title":"Home","body":"Earlier content","message":"Initial page","authorId":"member","updatedAt":"2026-10-25T05:00:00.000Z"}]}]}""")
+    ["wiki"] = Json("""{"homePageId":"home","pages":[{"id":"home","slug":"home","title":"Home","body":"# Welcome","message":"Create home","authorId":"member","updatedAt":"2026-10-26T05:00:00.000Z","history":[{"id":"version-1","title":"Home","body":"Earlier content","message":"Initial page","authorId":"member","updatedAt":"2026-10-25T05:00:00.000Z"}]},{"id":"child","parentId":"home","slug":"installation","title":"Installation","body":"![Architecture](https://example.com/diagram.png){width=400 height=240}","message":"Add nested guide","authorId":"member","updatedAt":"2026-10-29T05:00:00.000Z","history":[]}]}""")
 };
 foreach (var (tool, document) in documents) Check(ToolDocumentValidation.Valid(tool, document), $"Valid {tool} document accepted");
 Check(!ToolDocumentValidation.Valid("erd", Json(documents["erd"].GetRawText().Replace("\"toField\":\"f2\"", "\"toField\":\"missing\""))), "Dangling ERD reference rejected");

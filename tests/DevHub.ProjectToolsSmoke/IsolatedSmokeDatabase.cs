@@ -25,7 +25,7 @@ internal sealed class IsolatedSmokeDatabase : IAsyncDisposable
     public async Task Seed(ApplicationDbContext db, string? legacyMigration = null, Func<ApplicationDbContext, Guid, Task>? verifyMigration = null)
     {
         if (legacyMigration is null) await db.Database.EnsureCreatedAsync();
-        else await db.GetService<IMigrator>().MigrateAsync(legacyMigration);
+        else await db.GetService<IMigrator>().MigrateAsync();
         var now = DateTimeOffset.UtcNow;
         var user = User.Create("owner@example.test", "smoke_owner", "Smoke", "Owner", "test-only-hash", now);
         var organization = Organization.Create("Settings SQL smoke", null, user.Id, now);
@@ -35,6 +35,8 @@ internal sealed class IsolatedSmokeDatabase : IAsyncDisposable
         db.AddRange(user, organization, team, project);
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
+        // Seed with the current entity model (including newer columns), then test the historical upgrade.
+        if (legacyMigration is not null) await db.GetService<IMigrator>().MigrateAsync(legacyMigration);
         if (verifyMigration is not null) await verifyMigration(db, project.Id);
     }
     public async ValueTask DisposeAsync()

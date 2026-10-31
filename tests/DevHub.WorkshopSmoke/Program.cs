@@ -8,7 +8,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using DevHub.Api.Realtime;
 
+if (args.Contains("--ownership-audit")) {await OwnershipAudit.Run("zulan"); return;}
+if (args.Contains("--wiki-subpage-audit")) {await WikiSubpageAudit.Run(); return;}
 await OrganizationSettingsChecks.Run();
+await InviteCodeChecks.Run();
+await AvatarChecks.Run();
 await MembershipNotifications.Run();
 await SubscriptionRevocation.Run();
 var removalTracker = new WorkshopPresenceTracker(TimeProvider.System);

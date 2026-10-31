@@ -14,8 +14,9 @@ Set up the complete DevHub development environment on this device. Work autonomo
 through all non-secret steps, verify each stage, and tell me only when a step requires
 my account access or an interactive operating-system confirmation.
 
-1. Clone both repositories into sibling directories named `DevHubAPI` and
-   `DevHubClient`, then confirm both are on `master` and synchronized with `origin`.
+1. Clone both repositories into sibling directories named `api` and `client` under
+   a `DevHub` workspace, then confirm both are on `master` and synchronized with
+   `origin`. Preserve any existing work; do not reset a checkout to achieve this.
 2. Read the backend and frontend READMEs and inspect their project configuration before
    changing anything.
 3. Install or verify the required tooling:
@@ -30,7 +31,11 @@ my account access or an interactive operating-system confirmation.
    - Set `ConnectionStrings:DefaultConnection` with .NET user-secrets if the local SQL
      Server instance name differs from the repository default.
    - Generate a cryptographically random JWT signing key of at least 32 bytes and store
-     it as the `Jwt:Key` user-secret for `src/DevHub.Api/DevHub.Api.csproj`.
+     it as the `Jwt:Key` user-secret for `src/DevHub.Api/DevHub.Api.csproj`, only if
+     one has not already been restored or configured.
+   - For a new database, generate a separate random `Chat:EncryptionKey`. When
+     restoring existing data, preserve its original chat key, including an older
+     deployment's JWT-key fallback; replacing it prevents reading existing messages.
    - Do not print secret values in chat or write them to tracked files.
 6. Ask me to enter these OAuth values directly in my terminal when needed; never ask me
    to paste client secrets into chat:
@@ -44,7 +49,8 @@ my account access or an interactive operating-system confirmation.
 8. Run `dotnet dev-certs https --trust`. Pause only if I must approve the operating
    system trust dialog.
 9. Apply all EF Core migrations to the configured database.
-10. Create an untracked `DevHubClient/.env.local` containing:
+10. Use the tracked client environment profiles. If overrides are needed, create an
+    untracked `client/.env.development.local` containing:
 
     ```dotenv
     VITE_API_BASE_URL=/api
@@ -54,10 +60,11 @@ my account access or an interactive operating-system confirmation.
 
 11. Verify the backend with:
     - `dotnet build DevHub.sln --no-restore`
-    - `dotnet format DevHub.sln --no-restore --verify-no-changes`
+    - the relevant smoke suites, using disposable databases for SQL checks
     - `dotnet ef migrations has-pending-model-changes --project src/DevHub.Infrastructure --startup-project src/DevHub.Api --no-build`
 12. Verify the frontend with `npm run build` and `npm run lint`.
-13. Start the backend on `https://localhost:7116` and the frontend on
+13. Start the backend with `api/run-api.ps1 -Environment Local` on
+    `https://localhost:7116` and the frontend with `npm run dev:local` on
     `http://localhost:5173`. Confirm regular authentication, cookie refresh, Google and
     GitHub challenge redirects, account linking, and provider disconnect behavior.
 14. Leave both Git working trees clean except for intentionally untracked local secret
@@ -73,3 +80,33 @@ my account access or an interactive operating-system confirmation.
   development proxy.
 - Production origins, callback URLs, cookie security, database credentials, and provider
   credentials must be configured separately from development values.
+
+## Credentials to request
+
+Ask only for missing values. Collect secrets through a masked terminal prompt or an
+approved secret store, never chat, command history, a source file, or a Git commit.
+Store local API credentials in .NET user-secrets for the API project.
+
+| Scope | Needed input | Notes |
+| --- | --- | --- |
+| GitHub | Sign-in with access to both repositories | Use Git Credential Manager or the user's existing SSH setup. Do not embed a token in a remote URL. |
+| Local SQL Server | Instance/database and Windows authentication, or SQL username/password | Configure `ConnectionStrings:DefaultConnection`; a new machine's SQL instance may differ. |
+| API authentication | `Jwt:Key` | Generate for a new local database; preserve restored settings. |
+| API chat | `Chat:EncryptionKey`, or the original JWT fallback | Keep the key that encrypted any restored chat data. |
+| Google OAuth, if enabled | `Authentication:Google:ClientId` and `Authentication:Google:ClientSecret` | Register the local callback above. |
+| GitHub OAuth, if enabled | `Authentication:GitHub:ClientId` and `Authentication:GitHub:ClientSecret` | These are OAuth application credentials, separate from Git access. |
+| Client | API URL, OAuth API URL, and OAuth enabled flag | These are public settings; the client does not need provider secrets or database credentials. Never put a secret in `VITE_*`. |
+| Production deployment, only when requested | SSH access to the existing server | Reuse the established production settings; do not upload local user-secrets or regenerate production keys. |
+
+For password-only development without OAuth credentials, disable OAuth in the local
+client override. Production currently uses same-origin `/api`, with OAuth enabled.
+
+## Local recovery backup
+
+The current device's recovery folder contains Git bundles, source archives, deployment
+support files, and a manifest identifying both commits. Private development settings
+are stored separately as `private-settings.dpapi`: Windows DPAPI encrypts this for the
+current Windows account on this device. Use the accompanying restore script from that
+account. It is not a portable encrypted backup and cannot configure a different device;
+use the credential checklist above on another machine. No private settings belong in
+GitHub or the public frontend build.

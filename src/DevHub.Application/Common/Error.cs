@@ -6,11 +6,13 @@ public enum ErrorType
     Conflict,
     Unauthorized,
     Forbidden,
-    NotFound
+    NotFound,
+    Throttled
 }
 
 public sealed record Error(
     string Code,
     string Description,
     ErrorType Type,
-    IReadOnlyDictionary<string, string[]>? ValidationErrors = null);
+    IReadOnlyDictionary<string, string[]>? ValidationErrors = null,
+    int? RetryAfterSeconds = null);

@@ -14,7 +14,11 @@ public sealed record TeamResponse(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
     int MemberCount,
-    IReadOnlyList<Guid> MemberIds);
+    IReadOnlyList<Guid> MemberIds,
+    string? AvatarUrl = null);
+
+public sealed record SetTeamAvatarCommand(Guid OrganizationId, Guid TeamId, Guid RequestingUserId, [property: AvatarImage] string? AvatarUrl)
+    : IRequest<Result<TeamResponse>>;
 
 public sealed record CreateTeamCommand(
     Guid OrganizationId,

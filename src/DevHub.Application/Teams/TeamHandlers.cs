@@ -1,3 +1,5 @@
+using System.Text.Json;
+using DevHub.Application.Notifications;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Application.Organizations;
@@ -58,12 +60,14 @@ internal static class TeamMappings
         team.CreatedAtUtc,
         team.UpdatedAtUtc,
         team.Members.Count,
-        team.Members.Select(member => member.UserId).ToArray());
+        team.Members.Select(member => member.UserId).ToArray(),
+        team.AvatarUrl);
 }
 
 internal sealed class CreateTeamCommandHandler(
     IOrganizationRepository organizationRepository,
     ITeamRepository teamRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : IRequestHandler<CreateTeamCommand, Result<TeamResponse>>
@@ -116,6 +120,7 @@ internal sealed class CreateTeamCommandHandler(
 
         try
         {
+            await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "team-created", team.Name, team.Id, team.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (UniqueConstraintViolationException)
@@ -130,6 +135,7 @@ internal sealed class CreateTeamCommandHandler(
 internal sealed class UpdateTeamCommandHandler(
     IOrganizationRepository organizationRepository,
     ITeamRepository teamRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : IRequestHandler<UpdateTeamCommand, Result<TeamResponse>>
@@ -187,6 +193,7 @@ internal sealed class UpdateTeamCommandHandler(
             return Result<TeamResponse>.Failure(TeamErrors.NameAlreadyExists);
         }
 
+        var previous = JsonSerializer.Serialize(team.ToResponse() with {UpdatedAtUtc = null});
         team.Update(
             request.Name,
             request.Description,
@@ -194,6 +201,8 @@ internal sealed class UpdateTeamCommandHandler(
             timeProvider.GetUtcNow());
         try
         {
+            if (previous != JsonSerializer.Serialize(team.ToResponse() with {UpdatedAtUtc = null}))
+                await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "team-updated", team.Name, team.Id, team.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
         catch (UniqueConstraintViolationException)
@@ -208,6 +217,7 @@ internal sealed class UpdateTeamCommandHandler(
 internal sealed class DeleteTeamCommandHandler(
     IOrganizationRepository organizationRepository,
     ITeamRepository teamRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork)
     : IRequestHandler<DeleteTeamCommand, Result<Unit>>
 {
@@ -240,6 +250,7 @@ internal sealed class DeleteTeamCommandHandler(
         }
 
         teamRepository.Remove(team);
+        await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "team-deleted", team.Name, team.Id, team.Id), cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<Unit>.Success(Unit.Value);
     }
@@ -248,6 +259,7 @@ internal sealed class DeleteTeamCommandHandler(
 internal sealed class AddTeamMemberCommandHandler(
     IOrganizationRepository organizationRepository,
     ITeamRepository teamRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
     : IRequestHandler<AddTeamMemberCommand, Result<Unit>>
@@ -286,6 +298,7 @@ internal sealed class AddTeamMemberCommandHandler(
 
         if (team.AddMember(request.UserId, timeProvider.GetUtcNow()))
         {
+            await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "team-member-added", team.Name, team.Id, team.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -296,6 +309,7 @@ internal sealed class AddTeamMemberCommandHandler(
 internal sealed class RemoveTeamMemberCommandHandler(
     IOrganizationRepository organizationRepository,
     ITeamRepository teamRepository,
+    IWorkshopActivity activity,
     IUnitOfWork unitOfWork)
     : IRequestHandler<RemoveTeamMemberCommand, Result<Unit>>
 {
@@ -333,6 +347,7 @@ internal sealed class RemoveTeamMemberCommandHandler(
 
         if (team.RemoveMember(request.UserId))
         {
+            await activity.Queue(new WorkshopActivity(request.OrganizationId, request.RequestingUserId, "team-member-removed", team.Name, team.Id, team.Id), cancellationToken);
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 

@@ -2,6 +2,7 @@ using DevHub.Application.Abstractions.Persistence;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Users;
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace DevHub.Infrastructure.Persistence.Repositories;
 
@@ -29,7 +30,7 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
             .OrderBy(organization => organization.Name)
             .Select(organization => new DevHub.Application.Organizations.OrganizationResponse(
                 organization.Id, organization.OwnerUserId, organization.Name, organization.Description,
-                organization.CreatedAtUtc, organization.UpdatedAtUtc, organization.Members.Count, organization.Teams.Count))
+                organization.CreatedAtUtc, organization.UpdatedAtUtc, organization.Members.Count, organization.Teams.Count, organization.AvatarUrl))
             .ToListAsync(cancellationToken);
 
     public Task<Organization?> GetByIdAsync(
@@ -43,6 +44,26 @@ internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
             .Include(organization => organization.Teams)
                 .ThenInclude(team => team.Members)
             .SingleOrDefaultAsync(organization => organization.Id == id, cancellationToken);
+
+    public Task<bool> TryTransferOwnershipAsync(Guid organizationId, Guid currentOwnerId, Guid newOwnerId, DateTimeOffset now, CancellationToken cancellationToken = default) =>
+        dbContext.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            dbContext.ChangeTracker.Clear();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            // Serialize transfers and recheck authority after acquiring the lock.
+            var owner = await dbContext.Database.SqlQuery<Guid>($"SELECT [OwnerUserId] AS [Value] FROM [Organizations] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {organizationId}").SingleOrDefaultAsync(cancellationToken);
+            if (owner != currentOwnerId) return false;
+            var organization = await GetByIdAsync(organizationId, cancellationToken);
+            if (organization is null || !organization.TransferOwnership(currentOwnerId, newOwnerId, now)) return false;
+            // Clear flags before EF writes the new owner, so the unique filtered index is never violated.
+            await dbContext.Set<OrganizationMember>().Where(member => member.OrganizationId == organizationId && member.IsOwner)
+                .ExecuteUpdateAsync(update => update.SetProperty(member => member.IsOwner, false), cancellationToken);
+            var newOwner = organization.Members.Single(member => member.UserId == newOwnerId);
+            dbContext.Entry(newOwner).Property(member => member.IsOwner).IsModified = true;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return true;
+        });
 
     public async Task<IReadOnlyList<Organization>> ListForUserAsync(
         Guid userId,

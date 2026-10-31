@@ -4,8 +4,6 @@ using DevHub.Application.Users;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Users;
 using MediatR;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 namespace DevHub.Application.Organizations;
@@ -31,6 +29,7 @@ internal static class OrganizationErrors
         "Organizations.OwnerRequired",
         "Only an organization owner can perform this action.",
         ErrorType.Forbidden);
+    public static readonly Error MemberNotFound = new("Organizations.MemberNotFound", "Choose an existing organization member.", ErrorType.NotFound);
 
     public static readonly Error PermissionRequired = new(
         "Organizations.PermissionRequired",
@@ -54,7 +53,7 @@ internal static class OrganizationErrors
 
     public static readonly Error LastOwner = new(
         "Organizations.LastOwner",
-        "Promote another organization owner before leaving.",
+        "Transfer ownership to another member before leaving.",
         ErrorType.Conflict);
 
     public static readonly Error ProtectedRole = new(
@@ -89,7 +88,8 @@ internal static class OrganizationMappings
         organization.CreatedAtUtc,
         organization.UpdatedAtUtc,
         organization.Members.Count,
-        organization.Teams.Count);
+        organization.Teams.Count,
+        organization.AvatarUrl);
 
     public static UserResponse ToResponse(this User user) => user.ToUserResponse();
 
@@ -410,7 +410,9 @@ internal sealed class ListOrganizationMembersQueryHandler(IOrganizationRepositor
 internal sealed class CreateOrganizationInviteCommandHandler(
     IOrganizationRepository organizationRepository,
     IUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    DevHub.Application.Workshops.IWorkshopUsage usage,
+    DevHub.Application.Workshops.WorkshopLimits limits)
     : IRequestHandler<CreateOrganizationInviteCommand, Result<OrganizationInviteResponse>>
 {
     public async Task<Result<OrganizationInviteResponse>> Handle(
@@ -433,12 +435,16 @@ internal sealed class CreateOrganizationInviteCommandHandler(
         }
 
         var now = timeProvider.GetUtcNow();
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+        if (await usage.Reserve([
+            new($"invite-user:{request.RequestingUserId:N}", limits.InvitesPerUserPerDay, 1, TimeSpan.FromDays(1)),
+            new($"invite-workshop:{organization.Id:N}", limits.InvitesPerWorkshopPerDay, 1, TimeSpan.FromDays(1))
+        ], cancellationToken) is { } quotaError) return Result<OrganizationInviteResponse>.Failure(quotaError);
+        var token = OrganizationInviteCode.Create();
         var expiresAtUtc = now.AddDays(7);
         organizationRepository.AddInvite(OrganizationInvite.Create(
             organization.Id,
             request.RequestingUserId,
-            HashToken(token),
+            OrganizationInviteCode.Hash(token),
             expiresAtUtc,
             now));
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -446,8 +452,6 @@ internal sealed class CreateOrganizationInviteCommandHandler(
         return Result<OrganizationInviteResponse>.Success(new(token, expiresAtUtc));
     }
 
-    private static string HashToken(string token) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 }
 
 internal sealed class AcceptOrganizationInviteCommandHandler(
@@ -461,13 +465,13 @@ internal sealed class AcceptOrganizationInviteCommandHandler(
         AcceptOrganizationInviteCommand request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Token))
+        var code = OrganizationInviteCode.Normalize(request.Token);
+        if (code is null)
         {
             return Result<OrganizationResponse>.Failure(OrganizationErrors.InvalidInvite);
         }
 
-        var tokenHash = Convert.ToHexString(SHA256.HashData(
-            Encoding.UTF8.GetBytes(request.Token.Trim()))).ToLowerInvariant();
+        var tokenHash = OrganizationInviteCode.Hash(code);
         var invite = await organizationRepository.GetInviteByTokenHashAsync(tokenHash, cancellationToken);
         if (invite is null || invite.IsExpired(timeProvider.GetUtcNow()))
         {
@@ -856,14 +860,13 @@ internal sealed class RemoveOrganizationRoleCommandHandler(
     }
 }
 
-internal sealed class PromoteOrganizationOwnerCommandHandler(
+internal sealed class TransferOrganizationOwnershipCommandHandler(
     IOrganizationRepository organizationRepository,
-    IUnitOfWork unitOfWork,
     TimeProvider timeProvider)
-    : IRequestHandler<PromoteOrganizationOwnerCommand, Result<Unit>>
+    : IRequestHandler<TransferOrganizationOwnershipCommand, Result<Unit>>
 {
     public async Task<Result<Unit>> Handle(
-        PromoteOrganizationOwnerCommand request,
+        TransferOrganizationOwnershipCommand request,
         CancellationToken cancellationToken)
     {
         var organization = await organizationRepository.GetByIdAsync(
@@ -876,11 +879,11 @@ internal sealed class PromoteOrganizationOwnerCommandHandler(
         {
             return Result<Unit>.Failure(OrganizationErrors.OwnerRequired);
         }
-        if (organization.PromoteOwner(request.UserId, timeProvider.GetUtcNow()))
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-        return Result<Unit>.Success(Unit.Value);
+        if (!organization.HasMember(request.UserId)) return Result<Unit>.Failure(OrganizationErrors.MemberNotFound);
+        if (request.UserId == request.RequestingUserId) return Result<Unit>.Failure(new("Organizations.InvalidTransfer", "Choose another organization member.", ErrorType.Validation));
+        return await organizationRepository.TryTransferOwnershipAsync(organization.Id, request.RequestingUserId, request.UserId, timeProvider.GetUtcNow(), cancellationToken)
+            ? Result<Unit>.Success(Unit.Value)
+            : Result<Unit>.Failure(new("Organizations.OwnershipChanged", "Ownership changed in another session. Refresh and try again.", ErrorType.Conflict));
     }
 }
 
@@ -900,8 +903,7 @@ internal sealed class LeaveOrganizationCommandHandler(
         {
             return Result<Unit>.Failure(OrganizationErrors.NotFound);
         }
-        if (organization.IsOwner(request.RequestingUserId) &&
-            !organization.CanOwnerLeave(request.RequestingUserId))
+        if (organization.IsOwner(request.RequestingUserId))
         {
             return Result<Unit>.Failure(OrganizationErrors.LastOwner);
         }

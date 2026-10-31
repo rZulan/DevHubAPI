@@ -6,18 +6,24 @@ namespace DevHub.Domain.Todos;
 public sealed class Todo : BaseEntity
 {
     private Todo() { }
-    public Todo(Guid projectId, string name, string description, DateOnly? targetDate, DateTimeOffset now)
+    public Todo(Guid projectId, string name, string description, DateOnly? targetDate, DateTimeOffset now, DateOnly? startDate = null)
         : base(Guid.NewGuid(), now)
     {
         ProjectId = projectId;
         Name = name.Trim();
         Description = description.Trim();
-        TargetDate = targetDate;
+        SetDates(startDate, targetDate, now);
     }
     public Guid ProjectId { get; private set; }
     public string Name { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public DateOnly? TargetDate { get; private set; }
+    public DateOnly? StartDate { get; private set; }
+    public void SetDates(DateOnly? startDate, DateOnly? targetDate, DateTimeOffset now)
+    {
+        TodoSchedule.Validate(startDate, targetDate);
+        StartDate = startDate; TargetDate = targetDate; MarkUpdated(now);
+    }
     public const string DefaultColumnsJson = "[{\"Id\":\"pending\",\"Name\":\"Pending\"},{\"Id\":\"progress\",\"Name\":\"In progress\"},{\"Id\":\"done\",\"Name\":\"Done\"}]";
     public string ColumnsJson { get; private set; } = DefaultColumnsJson;
     public int BoardRevision { get; private set; }
@@ -63,6 +69,13 @@ public sealed class TodoTask : BaseEntity
     public string Description { get; private set; } = string.Empty;
     public string Status { get; private set; } = "pending";
     public Guid? AssigneeId { get; private set; }
+    public DateOnly? StartDate { get; private set; }
+    public DateOnly? TargetDate { get; private set; }
+    public void SetDates(DateOnly? startDate, DateOnly? targetDate, DateTimeOffset now)
+    {
+        TodoSchedule.Validate(startDate, targetDate);
+        StartDate = startDate; TargetDate = targetDate; MarkUpdated(now);
+    }
     public ICollection<TodoTaskAssignee> Assignees { get; private set; } = new List<TodoTaskAssignee>();
     public void Assign(Guid? assigneeId, DateTimeOffset now) => AssignMany(assigneeId is { } id ? [id] : [], now);
     public void AssignMany(IEnumerable<Guid> assigneeIds, DateTimeOffset now)
@@ -86,4 +99,13 @@ public sealed class TodoTaskAssignee
     public TodoTaskAssignee(Guid taskId, Guid userId) { TaskId = taskId; UserId = userId; }
     public Guid TaskId { get; private set; }
     public Guid UserId { get; private set; }
+}
+
+public static class TodoSchedule
+{
+    public static bool IsValid(DateOnly? startDate, DateOnly? targetDate) => startDate is null || targetDate is not null && startDate <= targetDate;
+    public static void Validate(DateOnly? startDate, DateOnly? targetDate)
+    {
+        if (!IsValid(startDate, targetDate)) throw new ArgumentException("Choose a target date on or after the From date.");
+    }
 }

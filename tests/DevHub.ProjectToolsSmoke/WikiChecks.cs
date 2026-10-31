@@ -21,6 +21,19 @@ internal static class WikiChecks
         Check(!Valid([page with {history = ["bad revision"]}]), "Malformed wiki history rejected");
         Check(!Valid(Enumerable.Range(0, 101).Select(i => (object)(page with {id = $"p{i}", slug = $"page-{i}", title = $"Page {i}"})).ToArray(), "p0"), "Wiki page limit enforced");
         Check(!Valid([page with {history = Enumerable.Range(0, 21).Select(i => (object)(revision with {id = $"v{i}"})).ToArray()}]), "Wiki history limit enforced");
+        var child = new {id = "child", slug = "child", title = "Child", page.body, page.message, page.authorId, page.updatedAt, page.history, parentId = (object?)"home"};
+        Check(Valid([page, child]), "Nested wiki pages accepted alongside legacy flat pages");
+        var second = child with {id = "second", slug = "second", title = "Second"};
+        var third = child with {id = "third", slug = "third", title = "Third"};
+        Check(Valid([page, child, second]), "Two direct subpages are accepted");
+        Check(!Valid([page, child, second, third]), "A third direct subpage is rejected");
+        Check(Valid([page, child, second, third with {parentId = "child"}]), "Each nested page has its own two-subpage allowance");
+        Check(Valid([page, child with {parentId = null}, second with {parentId = null}, third with {parentId = null}]), "Top-level pages are not restricted to two");
+        Check(Valid([page, child with {parentId = null}]), "Explicit top-level wiki page accepted");
+        Check(!Valid([page, child with {parentId = "missing"}]), "Missing parent rejected");
+        Check(!Valid([page, child with {parentId = "child"}]), "Self-parenting rejected");
+        Check(!Valid([child, child with {id = "home", slug = "home", title = "Home", parentId = "child"}]), "Cyclic wiki hierarchy rejected");
+        foreach (var invalid in new object[] {42, false, "", " "}) Check(!Valid([page, child with {parentId = invalid}]), "Malformed parent rejected");
     }
     private static void Check(bool condition, string label)
     {

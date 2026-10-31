@@ -19,6 +19,7 @@ public sealed class ProjectToolsController(IProjectToolsService tools, IHubConte
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }
     [HttpPut]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("workshop-save")]
     [RequestSizeLimit(8_000_000)]
     public async Task<IActionResult> Save(Guid organizationId, Guid projectId, string tool, SaveToolDocumentRequest request, CancellationToken ct)
     {

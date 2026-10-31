@@ -6,6 +6,7 @@ using DevHub.Application.Common;
 namespace DevHub.Api.Controllers;
 
 [ApiController]
+[RequestSizeLimit(1_000_000)]
 public abstract class ApiControllerBase : ControllerBase
 {
     protected ObjectResult Failure(Error error) =>

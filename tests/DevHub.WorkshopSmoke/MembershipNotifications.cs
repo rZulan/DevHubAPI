@@ -96,7 +96,7 @@ internal static class MembershipNotifications
             ("delete role", () => controller.DeleteRole(organizationId, roleId, cancelled)),
             ("assign role", () => controller.AssignRole(organizationId, roleId, memberId, cancelled)),
             ("remove role", () => controller.RemoveRole(organizationId, roleId, memberId, cancelled)),
-            ("promote owner", () => controller.PromoteOwner(organizationId, memberId, cancelled)),
+            ("promote owner", () => controller.TransferOwnership(organizationId, memberId, cancelled)),
             ("rename organization", () => controller.Update(organizationId, new("Renamed", null), cancelled)),
         };
         foreach (var change in changes)

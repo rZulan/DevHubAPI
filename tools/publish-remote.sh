@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 0077
 release=${1:?Release ID required}
 [[ "$release" =~ ^[0-9]{14}-[a-f0-9]{8}$ ]] || exit 2
 exec 9>/run/lock/devhub-publish.lock
@@ -10,6 +11,9 @@ test -r /etc/devhub/appsettings.Production.json
 api_changed=0
 client_changed=0
 stopped=0
+trap 'if (( stopped )); then systemctl start devhub; fi' EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 rollback() {
     status=$?
     trap - ERR
@@ -32,10 +36,11 @@ if [[ -f "$stage/api.tar.gz" ]]; then
     mkdir "$stage/api-next"
     tar -xzf "$stage/api.tar.gz" -C "$stage/api-next"
     test -f "$stage/api-next/DevHub.Api"
-    chmod +x "$stage/api-next/DevHub.Api"
     ln -s /etc/devhub/appsettings.Production.json "$stage/api-next/appsettings.Production.json"
     chown -R root:devhub "$stage/api-next"
-    chmod -R o-rwx "$stage/api-next"
+    find "$stage/api-next" -type d -exec chmod 750 {} +
+    find "$stage/api-next" -type f -exec chmod 640 {} +
+    chmod 750 "$stage/api-next/DevHub.Api"
 fi
 if [[ -f "$stage/client.tar.gz" ]]; then
     mkdir "$stage/client-next"
@@ -46,6 +51,12 @@ fi
 if [[ -d "$stage/api-next" ]]; then
     systemctl stop devhub
     stopped=1
+    if [[ -f "$stage/database-backup.tar.gz" ]]; then
+        mkdir "$stage/database-backup"
+        tar -xzf "$stage/database-backup.tar.gz" -C "$stage/database-backup"
+        chmod 700 "$stage/database-backup/DatabaseBackup"
+        "$stage/database-backup/DatabaseBackup" "$release"
+    fi
     if [[ -f "$stage/efbundle" ]]; then
         chmod 700 "$stage/efbundle"
         (cd "$stage/api-next"; ASPNETCORE_ENVIRONMENT=Production DOTNET_ENVIRONMENT=Production "$stage/efbundle")
@@ -54,6 +65,8 @@ if [[ -d "$stage/api-next" ]]; then
     # Record the move before activation so the error handler can restore it.
     api_changed=1
     mv "$stage/api-next" /opt/devhub/api
+    runuser -u devhub -- test -x /opt/devhub/api/DevHub.Api
+    runuser -u devhub -- test -r /opt/devhub/api/appsettings.Production.json
     systemctl start devhub
     healthy=0
     for attempt in {1..30}; do

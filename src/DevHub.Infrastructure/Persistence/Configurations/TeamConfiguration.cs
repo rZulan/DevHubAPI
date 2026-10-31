@@ -21,6 +21,7 @@ internal sealed class TeamConfiguration : IEntityTypeConfiguration<Team>
         builder.Property(team => team.NormalizedName).HasMaxLength(150).IsRequired();
         builder.HasIndex(team => new { team.OrganizationId, team.NormalizedName }).IsUnique();
         builder.Property(team => team.Description).HasMaxLength(1000);
+        builder.Property(team => team.AvatarUrl).HasMaxLength(DevHub.Domain.Common.AvatarImage.MaxLength);
         builder.Property(team => team.CreatedAtUtc).IsRequired();
         builder.Property(team => team.UpdatedAtUtc);
 

@@ -1,7 +1,6 @@
 using System.Data;
 using System.Net.Mail;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.BugReports;
 using DevHub.Application.Common;
@@ -10,16 +9,17 @@ using DevHub.Domain.Organizations;
 using DevHub.Domain.Projects;
 using DevHub.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using DevHub.Application.Notifications;
 
 namespace DevHub.Infrastructure.BugReports;
 
-internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService access, IOrganizationRepository organizations) : IBugReportsService
+internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService access, IOrganizationRepository organizations, IWorkshopActivity activity,
+    DevHub.Infrastructure.Workshops.WorkshopStorage storage) : IBugReportsService
 {
     private static readonly Error Missing = new("Bugs.NotFound", "The report or submission link is unavailable.", ErrorType.NotFound);
     private static readonly Error Conflict = new("Bugs.Conflict", "This item changed in another session. Reload and try again.", ErrorType.Conflict);
     private static Error Invalid(string message) => new("Bugs.Invalid", message, ErrorType.Validation);
     private static string Token() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
-    private static bool ValidToken(string token) => Regex.IsMatch(token, "^[a-f0-9]{64}$");
     private static bool ValidStatus(string status) => status is "new" or "triaged" or "in-progress" or "resolved" or "closed";
     private static bool ValidPriority(string priority) => priority is "low" or "medium" or "high" or "critical";
     private async Task<Error?> Access(BugScope scope, bool write, CancellationToken ct)
@@ -60,7 +60,9 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         if (report is null) return Result<BugDetail>.Failure(Missing);
         if (report.Revision != request.Revision) return Result<BugDetail>.Failure(Conflict);
         if (request.CategoryId is { } category && !await db.BugCategories.AnyAsync(c => c.ProjectId == scope.ProjectId && c.Id == category && (!c.Archived || report.CategoryId == category), ct)) return Result<BugDetail>.Failure(Invalid("Choose an active category from this project."));
+        var changed = report.Status != request.Status || report.Priority != request.Priority || report.CategoryId != request.CategoryId || report.InternalNotes != request.InternalNotes.Trim();
         report.Triage(request.Status, request.Priority, request.CategoryId, request.InternalNotes, DateTimeOffset.UtcNow);
+        if (changed) await activity.Queue(new(scope.OrganizationId, scope.UserId, "bug-updated", report.Title, report.Id, report.Id, scope.ProjectId), ct);
         try {await db.SaveChangesAsync(ct);} catch (PersistenceConcurrencyException) {return Result<BugDetail>.Failure(Conflict);}
         return await Get(scope, reportId, ct);
     }
@@ -75,17 +77,19 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
     {
         if (await Access(scope, true, ct) is { } error) return Result<BugPortalResponse>.Failure(error);
         var portal = await db.BugReportPortals.AsNoTracking().SingleOrDefaultAsync(p => p.ProjectId == scope.ProjectId, ct);
-        return Result<BugPortalResponse>.Success(portal is null ? new("", false, -1) : new(portal.Token, portal.Enabled, portal.Revision));
+        return Result<BugPortalResponse>.Success(portal is null ? new("", false, -1) : new(portal.Token, portal.Enabled, portal.Revision, BugPortalLink.ShortCode(portal.Token)));
     }
     public async Task<Result<BugPortalResponse>> SavePortal(BugScope scope, bool enabled, bool rotate, int revision, CancellationToken ct)
     {
         if (await Access(scope, true, ct) is { } error) return Result<BugPortalResponse>.Failure(error);
         var portal = await db.BugReportPortals.SingleOrDefaultAsync(p => p.ProjectId == scope.ProjectId, ct);
         if (revision < -1 || revision == int.MaxValue || revision != (portal?.Revision ?? -1)) return Result<BugPortalResponse>.Failure(Conflict);
+        var changed = portal is null || portal.Enabled != enabled || rotate;
         if (portal is null) {portal = BugReportPortal.Create(scope.ProjectId, Token()); if (!enabled) portal.Update(false); db.BugReportPortals.Add(portal);}
         else portal.Update(enabled, rotate ? Token() : null);
+        if (changed) await activity.Queue(new(scope.OrganizationId, scope.UserId, "bug-settings", "Bug report portal", scope.ProjectId, scope.ProjectId, scope.ProjectId), ct);
         try {await db.SaveChangesAsync(ct);} catch (PersistenceConcurrencyException) {return Result<BugPortalResponse>.Failure(Conflict);} catch (UniqueConstraintViolationException) {return Result<BugPortalResponse>.Failure(Conflict);}
-        return Result<BugPortalResponse>.Success(new(portal.Token, portal.Enabled, portal.Revision));
+        return Result<BugPortalResponse>.Success(new(portal.Token, portal.Enabled, portal.Revision, BugPortalLink.ShortCode(portal.Token)));
     }
     public async Task<Result<BugCategoryResponse>> SaveCategory(BugScope scope, Guid? id, string name, bool archived, CancellationToken ct)
     {
@@ -96,25 +100,35 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         if (id is null && await db.BugCategories.CountAsync(c => c.ProjectId == scope.ProjectId, ct) >= 100) return Result<BugCategoryResponse>.Failure(Invalid("This project has reached its 100-category limit. Rename or restore an existing category."));
         var normalized = name.Trim().ToUpperInvariant();
         if (await db.BugCategories.AnyAsync(c => c.ProjectId == scope.ProjectId && c.Id != id && c.NormalizedName == normalized, ct)) return Result<BugCategoryResponse>.Failure(Invalid("A category with this name already exists, including archived categories."));
+        var changed = category is null || category.Name != name.Trim() || category.Archived != archived;
         if (category is null) {category = BugCategory.Create(scope.ProjectId, name); db.BugCategories.Add(category);}
         category.Update(name, archived);
+        if (changed) await activity.Queue(new(scope.OrganizationId, scope.UserId, "bug-settings", "Bug report categories", scope.ProjectId, scope.ProjectId, scope.ProjectId), ct);
         try {await db.SaveChangesAsync(ct);} catch (UniqueConstraintViolationException) {return Result<BugCategoryResponse>.Failure(Invalid("A category with this name already exists."));}
         return Result<BugCategoryResponse>.Success(new(category.Id, category.Name, category.Archived));
     }
     public async Task<Result<PublicBugFormResponse>> GetPublicForm(string token, CancellationToken ct)
     {
-        if (!ValidToken(token)) return Result<PublicBugFormResponse>.Failure(Missing);
-        var portal = await db.BugReportPortals.AsNoTracking().SingleOrDefaultAsync(p => p.Token == token && p.Enabled, ct);
+        var lookupToken = BugPortalLink.LookupToken(token);
+        if (lookupToken is null) return Result<PublicBugFormResponse>.Failure(Missing);
+        var portal = await FindPublicPortal(lookupToken, ct);
         if (portal is null) return Result<PublicBugFormResponse>.Failure(Missing);
         var name = await db.Projects.Where(p => p.Id == portal.ProjectId).Select(p => p.Name).SingleAsync(ct);
         return Result<PublicBugFormResponse>.Success(new(name, (await Categories(portal.ProjectId, ct)).Where(c => !c.Archived).ToList()));
+    }
+    private async Task<BugReportPortal?> FindPublicPortal(string lookupToken, CancellationToken ct)
+    {
+        // Fail closed if a prefix ever matches more than one portal, including disabled portals.
+        var matches = await db.BugReportPortals.AsNoTracking().Where(portal => portal.Token.StartsWith(lookupToken)).Take(2).ToListAsync(ct);
+        return matches.Count == 1 && matches[0].Enabled ? matches[0] : null;
     }
     public Task<Result<BugReceipt>> SubmitPublic(string token, SubmitBugRequest request, CancellationToken ct) => Submit(null, token, request, ct);
     public Task<Result<BugReceipt>> SubmitTeam(BugScope scope, SubmitBugRequest request, CancellationToken ct) => Submit(scope, null, request, ct);
     private async Task<Result<BugReceipt>> Submit(BugScope? scope, string? token, SubmitBugRequest request, CancellationToken ct)
     {
         if (scope is not null && await Access(scope, true, ct) is { } accessError) return Result<BugReceipt>.Failure(accessError);
-        if (scope is null && (token is null || !ValidToken(token))) return Result<BugReceipt>.Failure(Missing);
+        var lookupToken = token is null ? null : BugPortalLink.LookupToken(token);
+        if (scope is null && lookupToken is null) return Result<BugReceipt>.Failure(Missing);
         if (request.SubmissionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Email) || request.Email.Length > 254 || !MailAddress.TryCreate(request.Email.Trim(), out var mail) || mail.Address != request.Email.Trim()
             || string.IsNullOrWhiteSpace(request.Title) || request.Title.Length > 200 || string.IsNullOrWhiteSpace(request.Description) || request.Description.Length > 20000
             || request.Steps is null || request.Steps.Length > 10000 || request.Environment is null || request.Environment.Length > 1000 || !ValidPriority(request.Priority)) return Result<BugReceipt>.Failure(Invalid("Enter a valid email, title, description, and priority within the supported lengths."));
@@ -127,7 +141,9 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         {
             if (attempts++ > 0) db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            var portal = scope is null ? await db.BugReportPortals.AsNoTracking().SingleOrDefaultAsync(p => p.Token == token && p.Enabled, ct) : null;
+            if (files.Count > 0 && !await storage.Lock(ct))
+                return Result<BugReceipt>.Failure(new("Workshop.StorageBusy", "Attachment storage is busy. Your selected files are preserved; please retry shortly.", ErrorType.Throttled, RetryAfterSeconds: 5));
+            var portal = scope is null ? await FindPublicPortal(lookupToken!, ct) : null;
             if (scope is null && portal is null) return Result<BugReceipt>.Failure(Missing);
             var projectId = scope?.ProjectId ?? portal!.ProjectId;
             var previous = await db.BugReports.AsNoTracking().Where(r => r.ProjectId == projectId && r.SubmissionId == request.SubmissionId).Select(r => new {r.Reference, r.Email}).SingleOrDefaultAsync(ct);
@@ -140,9 +156,14 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
                 var bytes = await daily.SelectMany(r => r.Attachments).SumAsync(a => (long?)a.Size, ct) ?? 0;
                 if (await daily.CountAsync(ct) >= 200 || bytes + files.Sum(f => (long)f.Content.Length) > 256L * 1024 * 1024) return Result<BugReceipt>.Failure(new("Bugs.Capacity", "This project's public inbox is temporarily full. Please try again later.", ErrorType.Conflict));
             }
+            var organizationId = scope?.OrganizationId ?? await db.Projects.Where(p => p.Id == projectId).Select(p => p.OrganizationId).SingleAsync(ct);
+            if (await storage.Check(organizationId, files.Sum(file => (long)file.Content.Length), ct) is { } storageError)
+                return Result<BugReceipt>.Failure(storageError);
             var report = BugReport.Create(projectId, request.SubmissionId, request.Email, request.Title, request.Description, request.Steps, request.Environment, request.CategoryId, request.Priority, scope is null ? "public" : "team", DateTimeOffset.UtcNow);
             foreach (var file in files) report.Attachments.Add(BugReportAttachment.Create(report.Id, file.Name, BugFileValidation.ContentType(file.Name, file.Content)!, file.Content));
-            db.BugReports.Add(report); await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
+            db.BugReports.Add(report);
+            await activity.Queue(new(organizationId, scope?.UserId ?? Guid.Empty, "bug-created", report.Title, report.Id, report.Id, projectId), ct);
+            await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
             return Result<BugReceipt>.Success(new(report.Reference));
         });
     }

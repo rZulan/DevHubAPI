@@ -6,6 +6,8 @@ namespace DevHub.Infrastructure.Authentication;
 internal sealed class PasswordHasherAdapter : IPasswordHasher
 {
     private static readonly object PasswordOwner = new();
+    private static readonly string MissingAccountHash = new PasswordHasher<object>().HashPassword(
+        PasswordOwner, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
     private readonly PasswordHasher<object> _passwordHasher = new();
 
     public string Hash(string password) =>
@@ -15,7 +17,7 @@ internal sealed class PasswordHasherAdapter : IPasswordHasher
     {
         var result = _passwordHasher.VerifyHashedPassword(
             PasswordOwner,
-            passwordHash,
+            string.IsNullOrEmpty(passwordHash) ? MissingAccountHash : passwordHash,
             providedPassword);
 
         return result is PasswordVerificationResult.Success or

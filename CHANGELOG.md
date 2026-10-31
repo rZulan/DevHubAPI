@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-30
+
+### Workshop quotas
+- Add configurable save, chat, task/note creation, daily invitation, notification fan-out, canvas object and cumulative attachment limits.
+- Persist daily/minute usage reservations across restarts, serialize attachment capacity checks, and reclaim expired counters in bounded batches.
+- Preserve existing large canvases and files, expose member-only storage usage, and keep list responses paginated.
+- Add disposable-SQL boundary/concurrency coverage and record rollout details in `docs/workshop-limits-2026-10-30.md`.
+
+### Security and abuse protection
+- Add authentication, API, creation, invitation, upload, and realtime budgets, including server-wide and per-user concurrent realtime work limits.
+- Reject untrusted browser origins for state-changing requests and realtime handshakes; keep API responses out of shared caches.
+- Bound login inputs and request bodies, preserve request-size error statuses, and reduce password timing differences for missing accounts.
+- Align authentication-cookie expiry with access tokens, reject older long-lived tickets, and renew through rotating refresh tokens.
+- Publish the Linux API with runtime 10.0.14; add dedicated security smoke checks and an encrypted pre-migration database backup helper.
+- Harden deployment file permissions and service-account checks, with rollback and restart safeguards.
+- Record production verification and remaining infrastructure work in `docs/security-review-2026-10-30.md`.
+
 ## 2026-10-26
 
 ### Project document storage

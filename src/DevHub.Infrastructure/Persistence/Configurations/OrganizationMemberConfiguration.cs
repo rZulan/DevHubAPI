@@ -12,6 +12,7 @@ internal sealed class OrganizationMemberConfiguration : IEntityTypeConfiguration
         builder.HasKey(member => new { member.OrganizationId, member.UserId });
         builder.Property(member => member.JoinedAtUtc).IsRequired();
         builder.Property(member => member.IsOwner).IsRequired();
+        builder.HasIndex(member => member.OrganizationId).IsUnique().HasFilter("[IsOwner] = 1").HasDatabaseName("UX_OrganizationMembers_SingleOwner");
         builder.Property(member => member.Nickname).HasMaxLength(80);
         builder.Property(member => member.ColorSchemeId)
             .HasMaxLength(64)

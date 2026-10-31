@@ -45,6 +45,7 @@ internal static class OrganizationPermissionPersistenceChecks
 
         var permissions = new Dictionary<string, string>
         {
+            ["calendar"] = OrganizationPermissions.ManageTasks,
             ["erd"] = OrganizationPermissions.EditErd,
             ["ui-editor"] = OrganizationPermissions.EditUiDesigns,
             ["notes"] = OrganizationPermissions.ManageNotes,

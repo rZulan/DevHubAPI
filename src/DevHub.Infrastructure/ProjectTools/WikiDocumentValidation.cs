@@ -18,6 +18,7 @@ internal static class WikiDocumentValidation
         if (!document.TryGetProperty("pages", out var pages) || pages.ValueKind != JsonValueKind.Array || pages.GetArrayLength() > 100
             || !document.TryGetProperty("homePageId", out var home)) return false;
         var ids = new HashSet<string>(); var slugs = new HashSet<string>(); var titles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parents = new Dictionary<string, string?>();
         foreach (var page in pages.EnumerateArray())
         {
             if (!Revision(page) || !ids.Add(Text(page, "id")!) || !titles.Add(Text(page, "title")!.Trim())
@@ -25,7 +26,21 @@ internal static class WikiDocumentValidation
                 || !page.TryGetProperty("history", out var history) || history.ValueKind != JsonValueKind.Array || history.GetArrayLength() > 20) return false;
             var revisionIds = new HashSet<string>();
             foreach (var revision in history.EnumerateArray()) if (!Revision(revision) || !revisionIds.Add(Text(revision, "id")!)) return false;
+            if (page.TryGetProperty("parentId", out var parent) && parent.ValueKind != JsonValueKind.Null
+                && !String(page, "parentId", 100, true)) return false;
+            parents.Add(Text(page, "id")!, Text(page, "parentId"));
         }
+        foreach (var id in ids)
+        {
+            var seen = new HashSet<string> { id };
+            var parent = parents[id];
+            while (parent is not null)
+            {
+                if (!parents.ContainsKey(parent) || !seen.Add(parent)) return false;
+                parent = parents[parent];
+            }
+        }
+        if (parents.Values.Where(parent => parent is not null).GroupBy(parent => parent).Any(group => group.Count() > 2)) return false;
         return ids.Count == 0 ? home.ValueKind == JsonValueKind.Null : home.ValueKind == JsonValueKind.String && ids.Contains(home.GetString()!);
     }
 }

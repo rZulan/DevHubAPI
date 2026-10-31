@@ -62,7 +62,7 @@ internal static class CollaborationChecks
             Check(events.Count == 0, $"Failed {tool} saves do not broadcast");
         }
         var todos = ToolsStub.Create<ITodoService>((method, _) => method.Name switch {
-            "Create" => Task.FromResult(success ? Result<TodoResponse>.Success(new(Guid.NewGuid(), project, "Test", "", null, DateTimeOffset.UtcNow, [], [], 0)) : Result<TodoResponse>.Failure(new("test", "denied", ErrorType.Forbidden))),
+            "Create" or "UpdateDates" => Task.FromResult(success ? Result<TodoResponse>.Success(new(Guid.NewGuid(), project, "Test", "", null, DateTimeOffset.UtcNow, [], [], 0)) : Result<TodoResponse>.Failure(new("test", "denied", ErrorType.Forbidden))),
             "UpdateTask" => Task.FromResult(success ? Result<TodoTaskResponse>.Success(new(Guid.NewGuid(), Guid.NewGuid(), project, "Edited", "", "pending", null, [])) : Result<TodoTaskResponse>.Failure(new("test", "denied", ErrorType.Forbidden))),
             "DeleteTask" => Task.FromResult(success ? Result<bool>.Success(true) : Result<bool>.Failure(new("test", "denied", ErrorType.Forbidden))),
             _ => throw new Exception(method.Name)
@@ -72,12 +72,13 @@ internal static class CollaborationChecks
         Check(events.Single().Group == groupName && (string)events.Single().Args[1]! == "todo", "TODO mutations notify other project sessions");
         success = false; events.Clear(); await todoController.Create(org, project, new("Test", null, null), default);
         Check(events.Count == 0, "Failed TODO mutations do not broadcast");
-        foreach (var change in new[] {"edit", "delete"})
+        foreach (var change in new[] {"edit", "delete", "dates"})
         {
             foreach (var ok in new[] {true, false})
             {
                 success = ok; events.Clear();
                 if (change == "edit") await todoController.UpdateTask(org, project, Guid.NewGuid(), Guid.NewGuid(), new("Edited", "", "pending", [], 0), default);
+                else if (change == "dates") await todoController.UpdateDates(org, project, Guid.NewGuid(), new(new DateOnly(2026, 11, 2), new DateOnly(2026, 10, 28), 0), default);
                 else await todoController.DeleteTask(org, project, Guid.NewGuid(), Guid.NewGuid(), new(0), default);
                 Check(ok ? events.Single().Group == groupName && (string)events.Single().Args[1]! == "todo" : events.Count == 0, $"TODO {change} broadcasts only on success");
             }

@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DevHub.Infrastructure.Ideas;
 
-internal sealed class IdeasService(ApplicationDbContext db, IOrganizationRepository organizations, ProjectDocumentStore documents) : IIdeasService
+internal sealed class IdeasService(ApplicationDbContext db, IOrganizationRepository organizations, ProjectDocumentStore documents, DevHub.Application.Workshops.WorkshopLimits limits) : IIdeasService
 {
     private static readonly Error Missing = new("Ideas.NotFound", "The project was not found.", ErrorType.NotFound);
     private static readonly HashSet<string> AllowedFonts = new(StringComparer.Ordinal)
@@ -47,6 +47,10 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
         if (request.Revision < 0 || request.Revision == int.MaxValue || !ValidItems(request.Items))
             return Result<IdeasResponse>.Failure(new Error("Ideas.Invalid", "The canvas contains invalid shapes or exceeds the supported document size.", ErrorType.Validation));
         var json = request.Items.GetRawText();
+        var previous = await documents.Get(organizationId, projectId, "ideas", ct);
+        var previousCount = previous?.ContentJson is not { } previousJson ? 0 : JsonSerializer.Deserialize<JsonElement>(previousJson).GetArrayLength();
+        if (request.Items.GetArrayLength() > Math.Max(limits.CanvasMaximumObjects, previousCount))
+            return Result<IdeasResponse>.Failure(new("Workshop.CanvasCapacity", $"This canvas supports {limits.CanvasMaximumObjects:N0} objects. Existing larger canvases can be edited or reduced. Export your draft before removing objects.", ErrorType.Validation));
         var saved = await documents.Save(organizationId, projectId, userId, "ideas", request.Revision, json, ct);
         if (!saved) return Result<IdeasResponse>.Failure(new Error("Ideas.Conflict", "This canvas was changed in another session. Reload the saved version before editing again.", ErrorType.Conflict));
         return Result<IdeasResponse>.Success(new(request.Revision + 1, request.Items));

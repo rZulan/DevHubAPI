@@ -62,6 +62,7 @@ public sealed class ProjectsController(ISender sender, WorkshopRealtime realtime
     }
 
     [HttpPost]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("resource-create")]
     [EndpointName("CreateProject")]
     [ProducesResponseType<ProjectResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]

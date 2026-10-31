@@ -10,6 +10,7 @@ public interface IOrganizationRepository
     Task<bool> IsMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<DevHub.Application.Organizations.OrganizationResponse>> ListSummariesForUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<Organization?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<bool> TryTransferOwnershipAsync(Guid organizationId, Guid currentOwnerId, Guid newOwnerId, DateTimeOffset now, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Organization>> ListForUserAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<User>> ListMembersAsync(Guid organizationId, CancellationToken cancellationToken = default);
     Task<bool> NameExistsAsync(string name, Guid? excludingId = null, CancellationToken cancellationToken = default);

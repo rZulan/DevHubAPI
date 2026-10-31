@@ -38,6 +38,18 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddOptions<DevHub.Application.Workshops.WorkshopLimits>()
+            .Bind(configuration.GetSection(DevHub.Application.Workshops.WorkshopLimits.Section))
+            .Validate(l => l.ChatMessagesPerMinute > 0 && l.ChatBurst > 0 && l.SavesPerMinute > 0 && l.CreatesPerMinute > 0
+                && l.InvitesPerUserPerDay > 0 && l.InvitesPerWorkshopPerDay > 0 && l.CanvasMaximumObjects is > 0 and <= 10000
+                && l.CanvasWarningObjects > 0 && l.CanvasWarningObjects <= l.CanvasMaximumObjects && l.MaximumMentions > 0
+                && l.NotificationsPerMinute > 0 && l.AttachmentBytesPerWorkshop > 0 && l.AttachmentBytesTotal >= l.AttachmentBytesPerWorkshop,
+                "Workshop limits must be positive and warning/storage thresholds must be ordered.").ValidateOnStart();
+        services.AddScoped<DevHub.Application.Workshops.IWorkshopUsage, DevHub.Infrastructure.Workshops.WorkshopUsage>();
+        services.AddHostedService<DevHub.Infrastructure.Workshops.WorkshopUsageCleanup>();
+        services.AddScoped<DevHub.Infrastructure.Workshops.WorkshopStorage>();
+        services.AddScoped<DevHub.Application.Workshops.IWorkshopStorage>(sp => sp.GetRequiredService<DevHub.Infrastructure.Workshops.WorkshopStorage>());
+        services.AddSingleton(sp => sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<DevHub.Application.Workshops.WorkshopLimits>>().Value);
         services.AddScoped<DevHub.Application.BugReports.IBugReportsService, DevHub.Infrastructure.BugReports.BugReportsService>();
         services.AddScoped<IExternalAccountRepository, ExternalAccountRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
@@ -46,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<DevHub.Infrastructure.ProjectTools.ProjectDocumentStore>();
         services.AddScoped<IChatService, ChatService>();
+        services.AddScoped<DevHub.Application.Notifications.INotificationService, DevHub.Infrastructure.Notifications.NotificationService>();
+        services.AddScoped<DevHub.Application.Notifications.IWorkshopActivity, DevHub.Infrastructure.Notifications.WorkshopActivityRecorder>();
         services.AddScoped<DevHub.Application.Ideas.IIdeasService, DevHub.Infrastructure.Ideas.IdeasService>();
         services.AddScoped<DevHub.Application.ProjectTools.IProjectToolsService, DevHub.Infrastructure.ProjectTools.ProjectToolsService>();
         services.AddScoped<DevHub.Application.Appearance.IMemberAppearanceService, DevHub.Infrastructure.Appearance.MemberAppearanceService>();
@@ -150,8 +164,17 @@ public static class DependencyInjection
                     : CookieSecurePolicy.SameAsRequest;
                 options.Cookie.SameSite = cookieOptions.GetSameSiteMode();
                 options.Cookie.Path = "/";
-                options.ExpireTimeSpan = TimeSpan.FromDays(jwtOptions.RefreshTokenExpirationDays);
-                options.SlidingExpiration = true;
+                options.ExpireTimeSpan = TimeSpan.FromMinutes(jwtOptions.ExpirationMinutes);
+                options.SlidingExpiration = false;
+                options.Events.OnValidatePrincipal = context =>
+                {
+                    // Bound previously issued long-lived tickets too. Renewal must pass
+                    // through the rotating, revocable refresh-token family.
+                    var now = (options.TimeProvider ?? TimeProvider.System).GetUtcNow();
+                    if (context.Properties.IssuedUtc is not { } issued || now >= issued + options.ExpireTimeSpan)
+                        context.RejectPrincipal();
+                    return Task.CompletedTask;
+                };
 
                 options.Events.OnRedirectToLogin = context =>
                 {

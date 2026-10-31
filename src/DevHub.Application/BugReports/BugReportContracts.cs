@@ -4,7 +4,7 @@ namespace DevHub.Application.BugReports;
 
 public sealed record BugScope(Guid OrganizationId, Guid ProjectId, Guid UserId);
 public sealed record BugCategoryResponse(Guid Id, string Name, bool Archived);
-public sealed record BugPortalResponse(string Token, bool Enabled, int Revision);
+public sealed record BugPortalResponse(string Token, bool Enabled, int Revision, string? ShortCode = null);
 public sealed record PublicBugFormResponse(string ProjectName, IReadOnlyList<BugCategoryResponse> Categories);
 public sealed record BugAttachmentInput(string FileName, byte[] Content);
 public sealed record SubmitBugRequest(Guid SubmissionId, string Email, string Title, string Description, string Steps, string Environment, Guid? CategoryId, string Priority, IReadOnlyList<BugAttachmentInput> Attachments);

@@ -15,6 +15,11 @@ internal static class ApiProblemDetails
         ArgumentNullException.ThrowIfNull(error);
 
         var statusCode = GetStatusCode(error.Type);
+        if (error.RetryAfterSeconds is { } retry)
+        {
+            httpContext.Response.Headers.RetryAfter = Math.Max(1, retry).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            httpContext.Response.Headers.CacheControl = "no-store";
+        }
         ProblemDetails problemDetails;
 
         if (error.Type == ErrorType.Validation)
@@ -106,6 +111,7 @@ internal static class ApiProblemDetails
             ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
             ErrorType.Forbidden => StatusCodes.Status403Forbidden,
             ErrorType.NotFound => StatusCodes.Status404NotFound,
+            ErrorType.Throttled => StatusCodes.Status429TooManyRequests,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(errorType),
                 errorType,
@@ -120,6 +126,7 @@ internal static class ApiProblemDetails
             ErrorType.Unauthorized => "Authentication failed",
             ErrorType.Forbidden => "Permission denied",
             ErrorType.NotFound => "Resource not found",
+            ErrorType.Throttled => "Workshop limit reached",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(errorType),
                 errorType,

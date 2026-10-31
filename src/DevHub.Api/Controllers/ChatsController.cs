@@ -32,6 +32,7 @@ public sealed class ChatsController(
     }
 
     [HttpPost("direct")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("resource-create")]
     public async Task<IActionResult> CreateDirect(
         Guid organizationId,
         [FromBody] CreateDirectChatRequest request,
@@ -45,6 +46,7 @@ public sealed class ChatsController(
     }
 
     [HttpPost("groups")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("resource-create")]
     public async Task<IActionResult> CreateGroup(
         Guid organizationId,
         [FromBody] CreateGroupChatRequest request,
