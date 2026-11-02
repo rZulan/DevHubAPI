@@ -7,6 +7,10 @@ ASP.NET Core API organized using Clean Architecture:
 - `DevHub.Domain` - domain entities and business rules.
 - `DevHub.Infrastructure` - EF Core, SQL Server repositories, password hashing, and JWT implementation.
 
+## Universal UML documents
+
+The `uml` project tool stores a versioned library of named diagrams. Each diagram has an optional UML type and its own Playground canvas items. Writes require Edit UML diagrams, with legacy Edit ideation compatibility. Validation checks diagram identities, names, types, UML symbols, shape properties, and per-canvas capacity. The separate diagram endpoints are retired; their data and applied migrations remain intact.
+
 ## Local setup
 
 The local connection string uses SQL Server Express. Change `DefaultConnection` in
@@ -69,41 +73,6 @@ In development, Scalar is available at `http://localhost:5288/scalar/v1`.
 
 ## Project editor documents
 
-`dbo.ProjectDocuments` stores the current Ideas, ERD, UI editor, SDLC, Notes, and Wiki
-documents. Each record has an ID, project ID, tool type, JSON content, revision,
-last editor (`UpdatedByUserId`), and UTC save time (`UpdatedAtUtc`). The unique
-project/tool index retains the existing one-document-per-tool behavior. New projects
-create a document record on the first successful save; their initial API responses
-remain unchanged. Project deletion cascades to its documents, while deleting an
-editor clears their attribution without deleting document content.
-
-`20261026084449_MoveEditorDocumentsToProjectDocuments` copies all six legacy JSON
-documents and their revisions before removing their twelve columns from `Projects`.
-Historical editor and save-time metadata remain null because they were not recorded.
-Future saves record both. Database constraints reject malformed JSON, negative
-revisions, and duplicate project/tool records. Existing endpoints, permission checks,
-revision conflicts, and realtime events are unchanged. This migration does not add
-multiple diagrams, document history, or automatic merging of simultaneous edits.
-
-When upgrading an existing installation, back up the database and stop the old API
-before applying migrations and starting the matching new API. The old API depends on
-the removed columns and cannot run against the new schema. From `api/`, for local use:
-
-```powershell
-dotnet ef database update --project src/DevHub.Infrastructure --startup-project src/DevHub.Api --configuration Release -- --environment Development
-```
-
-The migration's rollback restores the latest content and revisions to the legacy
-columns before dropping `ProjectDocuments`; the older schema cannot retain document
-IDs or save attribution. Stop the API before rolling back and restart the matching
-older API afterward.
-
-Verify migration upgrade/rollback, concurrent first and subsequent saves, metadata,
-constraints, permissions, and persistence against a disposable local SQL database:
-
-```powershell
-dotnet run --project tests/DevHub.ProjectToolsSmoke -c Release -- --isolated
-```
 
 ## Initial endpoints
 
@@ -216,6 +185,51 @@ delete teams and assign team leadership. Each team has exactly one leader; the o
 that leader can manage team members. A user must belong to the organization before they
 can be added to one of its teams, and the active leader cannot be removed until leadership
 is reassigned.
+
+## GitHub repository connections
+
+Create and edit project forms support up to ten labeled GitHub repositories in
+addition to the existing manual repository URL. New selections are verified on
+the server against the repositories accessible to both the connecting user and
+this GitHub App installation. Existing project managers can retain or remove
+previously verified links without borrowing the connector's GitHub credential.
+Names and URLs of selected private repositories are shared with project viewers;
+repository contents and credentials are not returned to other project members.
+
+Configure these server-only settings with user-secrets locally:
+`Integrations:GitHub:AppId`, `ClientId`, `ClientSecret`, `AppSlug`, and `CallbackUrl`.
+The local callback is `https://localhost:7116/api/integrations/github/callback`.
+Keep the GitHub App's private key in the existing secret store for installation
+operations; this picker uses user authorization tokens. Repository metadata read
+access is sufficient. Enable expiring user tokens and user authorization during
+installation. The initial integration does not require webhooks or code access.
+
+The API exposes `/api/integrations/github/status`, `POST authorize`,
+`GET installations`, `GET installations/{id}/repositories?page=1`, and
+`DELETE connection`. The anonymous callback verifies a protected, expiring
+correlation cookie, the initiating DevHub login session, and OAuth state.
+Regular authorization uses PKCE. Tokens are protected using ASP.NET Core Data
+Protection and refreshed on the server. Preserve the Data Protection key ring
+across restarts/deployments; losing it requires users to reconnect. Production
+deployments must configure a persistent, protected key ring shared by API instances.
+Disconnecting repository access leaves the existing GitHub sign-in method intact.
+
+Apply `AddGitHubRepositoryConnections` before running the updated API.
+Run `dotnet run --project tests/DevHub.GitHubSmoke --configuration Release`
+from `api/` for callback, authorization, and multi-repository persistence checks.
+This suite uses simulated GitHub HTTP responses and a disposable local SQL database.
+
+## Personal dashboards
+
+Members can read and save their private dashboard at
+`GET/PUT /api/organizations/{organizationId}/dashboard/personal`. The authenticated
+account determines whose layout is accessed; the request accepts only widgets.
+Every member can customize their own layout without the shared `Manage dashboard`
+permission. Personal saves do not publish or broadcast to the organization.
+
+Apply the `AddPersonalDashboards` EF migration before running the updated API.
+Run `dotnet run --project tests/DevHub.DashboardSmoke -c Release` from `api/` to
+verify migrations, persistence, and member isolation in a disposable local database.
 
 ## Environment switch
 

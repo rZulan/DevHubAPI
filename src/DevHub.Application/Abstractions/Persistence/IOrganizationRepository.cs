@@ -5,6 +5,7 @@ namespace DevHub.Application.Abstractions.Persistence;
 
 public interface IOrganizationRepository
 {
+    Task<OrganizationMember?> GetDashboardMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
     Task<Organization?> GetDashboardForMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
     Task<Organization?> GetMembershipForUserAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);
     Task<bool> IsMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default);

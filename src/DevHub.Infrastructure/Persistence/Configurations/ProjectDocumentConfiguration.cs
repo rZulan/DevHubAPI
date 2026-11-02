@@ -13,7 +13,7 @@ internal sealed class ProjectDocumentConfiguration : IEntityTypeConfiguration<Pr
         {
             table.HasCheckConstraint("CK_ProjectDocuments_ContentJson", "[ContentJson] IS NULL OR ISJSON([ContentJson]) = 1");
             table.HasCheckConstraint("CK_ProjectDocuments_Revision", "[Revision] >= 0");
-            table.HasCheckConstraint("CK_ProjectDocuments_ToolType", "[ToolType] IN ('ideas', 'erd', 'ui-editor', 'sdlc', 'notes', 'wiki', 'calendar')");
+            table.HasCheckConstraint("CK_ProjectDocuments_ToolType", "[ToolType] IN ('ideas', 'erd', 'ui-editor', 'sdlc', 'notes', 'wiki', 'calendar', 'state-machine', 'uml-class', 'uml-sequence', 'uml-use-case', 'uml-activity', 'uml')");
         });
         builder.HasKey(document => document.Id);
         builder.Property(document => document.Id).ValueGeneratedNever();

@@ -71,6 +71,43 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.ToTable("ExternalAccounts", (string)null);
                 });
 
+            modelBuilder.Entity("DevHub.Domain.Authentication.GitHubConnection", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ExpiresAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("GitHubUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ProtectedAccessToken")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ProtectedRefreshToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("RefreshExpiresAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("GitHubConnections", (string)null);
+                });
+
             modelBuilder.Entity("DevHub.Domain.Authentication.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -526,6 +563,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
 
+                    b.Property<string>("PersonalDashboardLayoutJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("PersonalDashboardSavedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.HasKey("OrganizationId", "UserId");
 
                     b.HasIndex("OrganizationId")
@@ -808,6 +851,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<string>("GitHubRepositoriesJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<Guid>("LeadUserId")
                         .HasColumnType("uniqueidentifier");
 
@@ -916,7 +962,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_ProjectDocuments_Revision", "[Revision] >= 0");
 
-                            t.HasCheckConstraint("CK_ProjectDocuments_ToolType", "[ToolType] IN ('ideas', 'erd', 'ui-editor', 'sdlc', 'notes', 'wiki', 'calendar')");
+                            t.HasCheckConstraint("CK_ProjectDocuments_ToolType", "[ToolType] IN ('ideas', 'erd', 'ui-editor', 'sdlc', 'notes', 'wiki', 'calendar', 'state-machine', 'uml-class', 'uml-sequence', 'uml-use-case', 'uml-activity', 'uml')");
                         });
                 });
 
@@ -1187,6 +1233,15 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("DevHub.Domain.Users.User", null)
                         .WithMany("ExternalAccounts")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Domain.Authentication.GitHubConnection", b =>
+                {
+                    b.HasOne("DevHub.Domain.Users.User", null)
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

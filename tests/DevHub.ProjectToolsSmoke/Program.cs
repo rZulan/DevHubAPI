@@ -17,6 +17,7 @@ WikiChecks.Run();
 RoadmapChecks.Run();
 DesignChecks.Run();
 CalendarChecks.Run();
+UmlLibraryChecks.Run();
 if (args.Contains("--schema-only")) return;
 var configuration = new ConfigurationBuilder().SetBasePath(Path.GetFullPath("src/DevHub.Api"))
     .AddJsonFile("appsettings.json").AddJsonFile("appsettings.Development.json", optional: true)
@@ -47,6 +48,7 @@ var documents = new Dictionary<string, JsonElement>
     ["notes"] = Json("""{"notes":[{"id":"note-1","title":"Next release","body":"Review onboarding","color":"#f6e7a6","updatedAt":"2026-10-20T00:00:00.000Z"}]}"""),
     ["wiki"] = Json("""{"homePageId":"home","pages":[{"id":"home","slug":"home","title":"Home","body":"# Welcome","message":"Create home","authorId":"member","updatedAt":"2026-10-26T05:00:00.000Z","history":[{"id":"version-1","title":"Home","body":"Earlier content","message":"Initial page","authorId":"member","updatedAt":"2026-10-25T05:00:00.000Z"}]},{"id":"child","parentId":"home","slug":"installation","title":"Installation","body":"![Architecture](https://example.com/diagram.png){width=400 height=240}","message":"Add nested guide","authorId":"member","updatedAt":"2026-10-29T05:00:00.000Z","history":[]}]}""")
 };
+documents["uml"] = Json(UmlLibraryChecks.Example);
 foreach (var (tool, document) in documents) Check(ToolDocumentValidation.Valid(tool, document), $"Valid {tool} document accepted");
 Check(!ToolDocumentValidation.Valid("erd", Json(documents["erd"].GetRawText().Replace("\"toField\":\"f2\"", "\"toField\":\"missing\""))), "Dangling ERD reference rejected");
 var optionalEnds = Json(documents["erd"].GetRawText().Replace("\"cardinality\":\"1:N\"", "\"cardinality\":\"1:N\",\"leftEnd\":\"zero-one\",\"rightEnd\":\"zero-many\""));

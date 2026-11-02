@@ -90,10 +90,10 @@ Check(shortForm.GetRawText() == publicJson.GetRawText(), "Short and full links l
 foreach (var invalid in new[] {"short", "abcdefghijklmn!", "ABEiM0RVZneImR", "AAAAAAAAAAAAAAAAAAAA"})
     Check((await Send(HttpMethod.Get, $"/api/public/bug-reports/{invalid}")).StatusCode == HttpStatusCode.NotFound, "Malformed and noncanonical short links are unavailable");
 var image = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1kAAAAASUVORK5CYII=");
-MultipartFormDataContent Form(Guid? submissionId = null, Guid? categoryId = null, string email = "tester@example.test", string fileName = "screenshot.png", byte[]? bytes = null)
+MultipartFormDataContent Form(Guid? submissionId = null, Guid? categoryId = null, string email = "tester@example.test", string fileName = "screenshot.png", byte[]? bytes = null, string? steps = "1. Open settings\n2. Click Save", string? environment = "Chrome on Windows")
 {
     var form = new MultipartFormDataContent();
-    foreach (var (name, value) in new Dictionary<string, string> {{"submissionId", (submissionId ?? Guid.NewGuid()).ToString()}, {"email", email}, {"title", "Save button does not respond"}, {"description", "Clicking Save leaves the settings unchanged."}, {"steps", "1. Open settings\n2. Click Save"}, {"environment", "Chrome on Windows"}, {"priority", "high"}, {"categoryId", (categoryId ?? category.Id).ToString()}}) form.Add(new StringContent(value), name);
+    foreach (var (name, value) in new Dictionary<string, string?> {{"submissionId", (submissionId ?? Guid.NewGuid()).ToString()}, {"email", email}, {"title", "Save button does not respond"}, {"description", "Clicking Save leaves the settings unchanged."}, {"steps", steps}, {"environment", environment}, {"priority", "high"}, {"categoryId", (categoryId ?? category.Id).ToString()}}) if (value is not null) form.Add(new StringContent(value), name);
     form.Add(new ByteArrayContent(bytes ?? image), "files", fileName); return form;
 }
 var submissionId = Guid.NewGuid();
@@ -163,5 +163,12 @@ await using (var collision = app.Services.CreateAsyncScope())
 }
 Check((await Send(HttpMethod.Get, currentShortPath)).StatusCode == HttpStatusCode.NotFound && (await Send(HttpMethod.Post, currentShortPath, body: Form())).StatusCode == HttpStatusCode.NotFound, "Ambiguous prefixes never open or submit to another project, including disabled portals");
 Check((await Send(HttpMethod.Get, $"/api/public/bug-reports/{portal.Token}")).IsSuccessStatusCode, "The full link still works if a short prefix is ambiguous");
+foreach (var optional in new string?[] {"", null})
+{
+    var submitted = await Read<BugReceipt>(await Send(HttpMethod.Post, $"/api/public/bug-reports/{portal.Token}", body: Form(steps: optional, environment: optional)), 201);
+    Check(!string.IsNullOrEmpty(submitted.Reference), optional is null ? "Public multipart submission accepts omitted optional steps and environment" : "Public multipart submission accepts blank optional steps and environment with screenshot");
+    var teamSubmitted = await Read<BugReceipt>(await Send(HttpMethod.Post, path, user: owner, body: Form(steps: optional, environment: optional)), 201);
+    Check(!string.IsNullOrEmpty(teamSubmitted.Reference), "Team multipart submission accepts empty or omitted optional fields");
+}
 await app.StopAsync();
 Console.WriteLine("Bug report HTTP and SQL checks completed; disposable database will be removed.");

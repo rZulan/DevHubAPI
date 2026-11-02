@@ -56,7 +56,7 @@ internal sealed class IdeasService(ApplicationDbContext db, IOrganizationReposit
         return Result<IdeasResponse>.Success(new(request.Revision + 1, request.Items));
     }
 
-    private static bool ValidItems(JsonElement items)
+    internal static bool ValidItems(JsonElement items)
     {
         if (items.ValueKind != JsonValueKind.Array || items.GetArrayLength() > 10000 || items.GetRawText().Length > 4_000_000) return false;
         var ids = new HashSet<string>();

@@ -15,7 +15,7 @@ public static class ToolDocumentValidation
     public static bool Valid(string tool, JsonElement document)
     {
         if (document.ValueKind != JsonValueKind.Object || document.GetRawText().Length > 4_000_000) return false;
-        try { return tool switch { "erd" => Erd(document), "ui-editor" => Design(document), "sdlc" => Roadmap(document), "notes" => Notes(document), "wiki" => WikiDocumentValidation.Valid(document), "calendar" => CalendarDocumentValidation.Valid(document), _ => false }; }
+        try { return tool switch { "uml" => UmlLibraryValidation.Valid(document), "erd" => Erd(document), "ui-editor" => Design(document), "sdlc" => Roadmap(document), "notes" => Notes(document), "wiki" => WikiDocumentValidation.Valid(document), "calendar" => CalendarDocumentValidation.Valid(document), _ => false }; }
         catch (InvalidOperationException) { return false; }
     }
     private static bool Erd(JsonElement document)

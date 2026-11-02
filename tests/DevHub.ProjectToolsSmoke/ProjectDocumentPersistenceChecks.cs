@@ -24,7 +24,7 @@ internal static class ProjectDocumentPersistenceChecks
         await db.SaveChangesAsync();
         var tools = scope.ServiceProvider.GetRequiredService<IProjectToolsService>();
         var ideas = scope.ServiceProvider.GetRequiredService<IIdeasService>();
-        foreach (var tool in new[] { "erd", "ui-editor", "sdlc", "notes", "wiki", "calendar" })
+        foreach (var tool in new[] { "erd", "ui-editor", "sdlc", "notes", "wiki", "calendar", "uml" })
         {
             var initial = Require(await tools.Get(project.OrganizationId, project.Id, owner, tool, default));
             Check(initial.Revision == 0 && initial.Document is null, $"New projects retain the empty {tool} response without a saved record");

@@ -15,6 +15,8 @@ public static class OrganizationPermissions
     public const string EditIdeation = "Edit ideation";
     public const string EditErd = "Edit ERD";
     public const string EditUiDesigns = "Edit UI designs";
+    public const string EditStateMachines = "Edit state machines";
+    public const string EditUmlDiagrams = "Edit UML diagrams";
     public const string ManageNotes = "Manage notes";
     public const string ManageWiki = "Manage wiki";
     public const string ManageBugReports = "Manage bug reports";
@@ -28,7 +30,7 @@ public static class OrganizationPermissions
         var granted = permissions.ToHashSet(StringComparer.Ordinal);
         return granted.Contains(Administrator) || granted.Contains(permission) || (permission switch
         {
-            EditErd or EditUiDesigns or ManageNotes => granted.Contains(EditIdeation),
+            EditErd or EditUiDesigns or EditStateMachines or EditUmlDiagrams or ManageNotes => granted.Contains(EditIdeation),
             ManageRoadmap => granted.Contains(ManageProjects),
             ManageDashboard => granted.Contains(ManageOrganization),
             CreateInvites => granted.Contains(ManageInvites),
@@ -51,6 +53,8 @@ public static class OrganizationPermissions
         EditIdeation,
         EditErd,
         EditUiDesigns,
+        EditStateMachines,
+        EditUmlDiagrams,
         ManageNotes,
         ManageWiki,
         ManageBugReports,

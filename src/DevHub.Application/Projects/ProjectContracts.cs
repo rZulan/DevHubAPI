@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using DevHub.Application.Common;
 using MediatR;
+using DevHub.Application.GitHub;
 
 namespace DevHub.Application.Projects;
 
@@ -23,7 +24,8 @@ public sealed record ProjectResponse(
     DateOnly? StartDate,
     DateOnly? TargetDate,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? UpdatedAtUtc);
+    DateTimeOffset? UpdatedAtUtc,
+    IReadOnlyList<GitHubRepositoryLink>? GitHubRepositories = null);
 
 public sealed record CreateProjectCommand(
     Guid OrganizationId,
@@ -42,7 +44,8 @@ public sealed record CreateProjectCommand(
     [property: StringLength(500)] string? DatabaseDetails,
     IReadOnlyList<string> Environments,
     DateOnly? StartDate,
-    DateOnly? TargetDate)
+    DateOnly? TargetDate,
+    IReadOnlyList<GitHubRepositorySelection>? GitHubRepositories = null)
     : IRequest<Result<ProjectResponse>>;
 
 public sealed record UpdateProjectCommand(
@@ -63,7 +66,8 @@ public sealed record UpdateProjectCommand(
     [property: StringLength(500)] string? DatabaseDetails,
     IReadOnlyList<string> Environments,
     DateOnly? StartDate,
-    DateOnly? TargetDate)
+    DateOnly? TargetDate,
+    IReadOnlyList<GitHubRepositorySelection>? GitHubRepositories = null)
     : IRequest<Result<ProjectResponse>>;
 
 public sealed record DeleteProjectCommand(

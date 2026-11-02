@@ -38,6 +38,9 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddDataProtection();
+        services.AddHttpClient<DevHub.Infrastructure.GitHub.GitHubIntegration>(client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<DevHub.Application.GitHub.IGitHubRepositoryResolver>(sp => sp.GetRequiredService<DevHub.Infrastructure.GitHub.GitHubIntegration>());
         services.AddOptions<DevHub.Application.Workshops.WorkshopLimits>()
             .Bind(configuration.GetSection(DevHub.Application.Workshops.WorkshopLimits.Section))
             .Validate(l => l.ChatMessagesPerMinute > 0 && l.ChatBurst > 0 && l.SavesPerMinute > 0 && l.CreatesPerMinute > 0
@@ -268,7 +271,7 @@ public static class DependencyInjection
             "Bearer",
             context.AccessToken);
         userRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        userRequest.Headers.UserAgent.ParseAdd("DevHub");
+        userRequest.Headers.UserAgent.ParseAdd("Zevont");
 
         using var userResponse = await context.Backchannel.SendAsync(
             userRequest,
@@ -361,7 +364,7 @@ public static class DependencyInjection
             "Bearer",
             context.AccessToken);
         emailRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        emailRequest.Headers.UserAgent.ParseAdd("DevHub");
+        emailRequest.Headers.UserAgent.ParseAdd("Zevont");
 
         using var emailResponse = await context.Backchannel.SendAsync(
             emailRequest,

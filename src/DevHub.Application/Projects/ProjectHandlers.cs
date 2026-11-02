@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevHub.Application.Notifications;
 using DevHub.Application.Abstractions.Persistence;
+using DevHub.Application.GitHub;
 using DevHub.Application.Common;
 using DevHub.Application.Organizations;
 using DevHub.Domain.Organizations;
@@ -51,6 +52,8 @@ internal static class ProjectErrors
 
 internal static class ProjectMappings
 {
+    public static IReadOnlyList<GitHubRepositoryLink> GitHubLinks(this Project project) =>
+        string.IsNullOrWhiteSpace(project.GitHubRepositoriesJson) ? [] : JsonSerializer.Deserialize<GitHubRepositoryLink[]>(project.GitHubRepositoriesJson) ?? [];
     public static ProjectResponse ToResponse(this Project project) => new(
         project.Id,
         project.OrganizationId,
@@ -70,7 +73,8 @@ internal static class ProjectMappings
         project.StartDate,
         project.TargetDate,
         project.CreatedAtUtc,
-        project.UpdatedAtUtc);
+        project.UpdatedAtUtc,
+        project.GitHubLinks());
 
     public static bool TryParseStatus(string status, out ProjectStatus parsedStatus) =>
         Enum.TryParse(
@@ -141,7 +145,8 @@ internal sealed class CreateProjectCommandHandler(
     IProjectRepository projectRepository,
     IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IGitHubRepositoryResolver github)
     : IRequestHandler<CreateProjectCommand, Result<ProjectResponse>>
 {
     public async Task<Result<ProjectResponse>> Handle(
@@ -206,6 +211,12 @@ internal sealed class CreateProjectCommandHandler(
             request.StartDate,
             request.TargetDate,
             timeProvider.GetUtcNow());
+        if (request.GitHubRepositories is {Count: > 0})
+        {
+            var links = await github.Resolve(request.RequestingUserId, request.GitHubRepositories, [], cancellationToken);
+            if (!links.IsSuccess) return Result<ProjectResponse>.Failure(links.Error!);
+            project.SetGitHubRepositories(JsonSerializer.Serialize(links.Value));
+        }
         projectRepository.Add(project);
 
         try
@@ -240,7 +251,8 @@ internal sealed class UpdateProjectCommandHandler(
     IProjectRepository projectRepository,
     IWorkshopActivity activity,
     IUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IGitHubRepositoryResolver github)
     : IRequestHandler<UpdateProjectCommand, Result<ProjectResponse>>
 {
     public async Task<Result<ProjectResponse>> Handle(
@@ -305,6 +317,12 @@ internal sealed class UpdateProjectCommandHandler(
 
         ProjectMappings.TryParseStatus(request.Status, out var status);
         var previous = JsonSerializer.Serialize(project.ToResponse() with {UpdatedAtUtc = null});
+        if (request.GitHubRepositories is not null)
+        {
+            var links = await github.Resolve(request.RequestingUserId, request.GitHubRepositories, project.GitHubLinks(), cancellationToken);
+            if (!links.IsSuccess) return Result<ProjectResponse>.Failure(links.Error!);
+            project.SetGitHubRepositories(JsonSerializer.Serialize(links.Value));
+        }
         project.Update(
             team.Id,
             request.LeadUserId,

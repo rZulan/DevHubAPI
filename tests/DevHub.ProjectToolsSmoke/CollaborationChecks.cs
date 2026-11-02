@@ -51,7 +51,7 @@ internal static class CollaborationChecks
         var tools = ToolsStub.Create<IProjectToolsService>((method, _) => method.Name == "Save"
             ? Task.FromResult(success ? Result<ToolDocumentResponse>.Success(new(7, JsonSerializer.Deserialize<JsonElement>("{\"tables\":[],\"relationships\":[]}"))) : Result<ToolDocumentResponse>.Failure(new("test", "denied", ErrorType.Forbidden))) : throw new Exception(method.Name));
         var controller = new ProjectToolsController(tools, context, realtime) {ControllerContext = Auth(user)};
-        foreach (var tool in new[] {"erd", "ui-editor", "sdlc", "notes"})
+        foreach (var tool in new[] {"erd", "ui-editor", "sdlc", "notes", "uml"})
         {
             events.Clear(); success = true;
             await controller.Save(org, project, tool, new(6, JsonSerializer.Deserialize<JsonElement>("{}")), default);

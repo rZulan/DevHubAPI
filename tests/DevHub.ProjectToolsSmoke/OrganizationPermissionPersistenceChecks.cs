@@ -48,6 +48,7 @@ internal static class OrganizationPermissionPersistenceChecks
             ["calendar"] = OrganizationPermissions.ManageTasks,
             ["erd"] = OrganizationPermissions.EditErd,
             ["ui-editor"] = OrganizationPermissions.EditUiDesigns,
+            ["uml"] = OrganizationPermissions.EditUmlDiagrams,
             ["notes"] = OrganizationPermissions.ManageNotes,
             ["wiki"] = OrganizationPermissions.ManageWiki,
             ["sdlc"] = OrganizationPermissions.ManageRoadmap
@@ -61,8 +62,8 @@ internal static class OrganizationPermissionPersistenceChecks
                 var loaded = await service.Get(project.OrganizationId, project.Id, user.Id, tool, default);
                 Check(loaded.IsSuccess, $"{permission} retains team project read access");
                 var saved = await service.Save(project.OrganizationId, project.Id, user.Id, tool, new(loaded.Value!.Revision, document), default);
-                Check(tool == allowedTool ? saved.IsSuccess : saved.Error?.Type == ErrorType.Forbidden,
-                    $"{permission} {(tool == allowedTool ? "permits" : "does not permit")} {tool} writes through SQL");
+                Check(permissions[tool] == permission ? saved.IsSuccess : saved.Error?.Type == ErrorType.Forbidden,
+                    $"{permission} {(permissions[tool] == permission ? "permits" : "does not permit")} {tool} writes through SQL");
             }
         }
         team.RemoveMember(user.Id);

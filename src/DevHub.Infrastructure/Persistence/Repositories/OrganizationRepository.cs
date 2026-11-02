@@ -9,6 +9,10 @@ namespace DevHub.Infrastructure.Persistence.Repositories;
 internal sealed class OrganizationRepository(ApplicationDbContext dbContext)
     : IOrganizationRepository
 {
+    public Task<OrganizationMember?> GetDashboardMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default) =>
+        dbContext.Set<OrganizationMember>().SingleOrDefaultAsync(
+            member => member.OrganizationId == organizationId && member.UserId == userId, cancellationToken);
+
     public Task<Organization?> GetDashboardForMemberAsync(Guid organizationId, Guid userId, CancellationToken cancellationToken = default) =>
         dbContext.Organizations.AsNoTracking().SingleOrDefaultAsync(
             organization => organization.Id == organizationId && organization.Members.Any(member => member.UserId == userId), cancellationToken);

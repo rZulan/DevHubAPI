@@ -1,6 +1,7 @@
 using DevHub.Api.Realtime;
 using System.ComponentModel.DataAnnotations;
 using DevHub.Application.Projects;
+using DevHub.Application.GitHub;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,7 +23,8 @@ public sealed record SaveProjectRequest(
     [StringLength(500)] string? DatabaseDetails,
     IReadOnlyList<string>? Environments,
     DateOnly? StartDate,
-    DateOnly? TargetDate);
+    DateOnly? TargetDate,
+    [MaxLength(10)] IReadOnlyList<GitHubRepositorySelection>? GitHubRepositories = null);
 
 /// <summary>Creates and manages projects within an organization.</summary>
 [Tags("Projects")]
@@ -146,7 +148,8 @@ public sealed class ProjectsController(ISender sender, WorkshopRealtime realtime
         request.DatabaseDetails,
         request.Environments ?? [],
         request.StartDate,
-        request.TargetDate);
+        request.TargetDate,
+        request.GitHubRepositories);
 
     private static UpdateProjectCommand UpdateCommand(
         Guid organizationId,
@@ -170,5 +173,6 @@ public sealed class ProjectsController(ISender sender, WorkshopRealtime realtime
         request.DatabaseDetails,
         request.Environments ?? [],
         request.StartDate,
-        request.TargetDate);
+        request.TargetDate,
+        request.GitHubRepositories);
 }

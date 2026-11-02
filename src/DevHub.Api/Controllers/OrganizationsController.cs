@@ -293,6 +293,27 @@ public sealed class OrganizationsController(
         return Ok(result.Value);
     }
 
+    [HttpGet("{organizationId:guid}/dashboard/personal")]
+    [EndpointName("GetPersonalDashboard")]
+    [ProducesResponseType<PersonalDashboardResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetPersonalDashboard(Guid organizationId, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new GetPersonalDashboardQuery(organizationId, userId), cancellationToken);
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
+    [HttpPut("{organizationId:guid}/dashboard/personal")]
+    [EndpointName("SavePersonalDashboard")]
+    [ProducesResponseType<PersonalDashboardResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SavePersonalDashboard(Guid organizationId, [FromBody] SaveOrganizationDashboardRequest request, CancellationToken cancellationToken)
+    {
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await sender.Send(new SavePersonalDashboardCommand(organizationId, userId, request.Widgets), cancellationToken);
+        // Personal layouts are never broadcast to other organization members.
+        return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
+    }
+
     [HttpGet("{organizationId:guid}/roles")]
     [EndpointName("ListOrganizationRoles")]
     [ProducesResponseType<IReadOnlyList<OrganizationRoleResponse>>(StatusCodes.Status200OK)]

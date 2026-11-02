@@ -70,6 +70,8 @@ public sealed class Project : BaseEntity
     public ProjectStatus Status { get; private set; }
     public string TechStack { get; private set; } = string.Empty;
     public string? RepositoryUrl { get; private set; }
+    public string? GitHubRepositoriesJson { get; private set; }
+    public void SetGitHubRepositories(string json) => GitHubRepositoriesJson = json;
     public string? DocumentationUrl { get; private set; }
     public string? DesignUrl { get; private set; }
     public string? LiveUrl { get; private set; }

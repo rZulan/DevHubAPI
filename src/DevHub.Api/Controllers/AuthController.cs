@@ -459,7 +459,7 @@ public sealed class AuthController(
         var givenName = principal.FindFirstValue(ClaimTypes.GivenName);
         var surname = principal.FindFirstValue(ClaimTypes.Surname);
         var nameParts = displayName.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        var firstName = givenName ?? nameParts.FirstOrDefault() ?? "DevHub";
+        var firstName = givenName ?? nameParts.FirstOrDefault() ?? "Zevont";
         var lastName = surname ?? (nameParts.Length > 1 ? nameParts[1] : "User");
 
         return new ExternalIdentity(

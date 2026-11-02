@@ -155,6 +155,19 @@ public sealed record OrganizationDashboardResponse(
     IReadOnlyList<DashboardWidgetDefinition> Widgets,
     DateTimeOffset? PublishedAtUtc);
 
+public sealed record PersonalDashboardResponse(
+    IReadOnlyList<DashboardWidgetDefinition> Widgets,
+    DateTimeOffset? SavedAtUtc);
+
+public sealed record GetPersonalDashboardQuery(Guid OrganizationId, Guid RequestingUserId)
+    : IRequest<Result<PersonalDashboardResponse>>;
+
+public sealed record SavePersonalDashboardCommand(
+    Guid OrganizationId,
+    Guid RequestingUserId,
+    IReadOnlyList<DashboardWidgetDefinition> Widgets)
+    : IRequest<Result<PersonalDashboardResponse>>;
+
 public sealed record GetOrganizationDashboardQuery(Guid OrganizationId, Guid RequestingUserId)
     : IRequest<Result<OrganizationDashboardResponse>>;
 

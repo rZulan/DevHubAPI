@@ -13,8 +13,8 @@ public sealed class SubmitBugForm
     [Required, EmailAddress, StringLength(254)] public string Email {get; set;} = "";
     [Required, StringLength(200)] public string Title {get; set;} = "";
     [Required, StringLength(20000)] public string Description {get; set;} = "";
-    [StringLength(10000)] public string Steps {get; set;} = "";
-    [StringLength(1000)] public string Environment {get; set;} = "";
+    [StringLength(10000)] public string? Steps {get; set;}
+    [StringLength(1000)] public string? Environment {get; set;}
     public Guid? CategoryId {get; set;}
     [Required] public string Priority {get; set;} = "medium";
     public List<IFormFile> Files {get; set;} = [];

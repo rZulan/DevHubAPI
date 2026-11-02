@@ -11,7 +11,7 @@ internal sealed class ProjectToolsService(ProjectDocumentStore documents, IIdeas
     DevHub.Application.Workshops.WorkshopLimits limits, DevHub.Application.Workshops.IWorkshopUsage usage) : IProjectToolsService
 {
     private static readonly Error Missing = new("Tools.NotFound", "The project tool was not found.", ErrorType.NotFound);
-    private static bool Known(string tool) => tool is "erd" or "ui-editor" or "sdlc" or "notes" or "wiki" or "calendar";
+    private static bool Known(string tool) => tool is "erd" or "ui-editor" or "sdlc" or "notes" or "wiki" or "calendar" or "uml";
     public async Task<Result<ToolDocumentResponse>> Get(Guid organizationId, Guid projectId, Guid userId, string tool, CancellationToken ct)
     {
         if (!Known(tool) || !await ideas.CanView(organizationId, projectId, userId, ct)) return Result<ToolDocumentResponse>.Failure(Missing);
@@ -27,6 +27,7 @@ internal sealed class ProjectToolsService(ProjectDocumentStore documents, IIdeas
         {
             "erd" => OrganizationPermissions.EditErd,
             "ui-editor" => OrganizationPermissions.EditUiDesigns,
+            "uml" => OrganizationPermissions.EditUmlDiagrams,
             "notes" => OrganizationPermissions.ManageNotes,
             "wiki" => OrganizationPermissions.ManageWiki,
             "calendar" => OrganizationPermissions.ManageTasks,
@@ -37,6 +38,16 @@ internal sealed class ProjectToolsService(ProjectDocumentStore documents, IIdeas
         if (request.Revision < 0 || request.Revision == int.MaxValue || !ToolDocumentValidation.Valid(tool, request.Document))
             return Result<ToolDocumentResponse>.Failure(new("Tools.Invalid", "The document contains invalid properties, references or exceeds the supported size.", ErrorType.Validation));
         var json = request.Document.GetRawText();
+        if (tool == "uml")
+        {
+            var previous = await documents.Get(organizationId, projectId, tool, ct);
+            if ((previous?.Revision ?? 0) != request.Revision)
+                return Result<ToolDocumentResponse>.Failure(new("Tools.Conflict", "Another session saved changes. Reload before editing again.", ErrorType.Conflict));
+            var old = previous?.ContentJson is { } prior ? JsonSerializer.Deserialize<JsonElement>(prior).GetProperty("diagrams").EnumerateArray().ToDictionary(d => d.GetProperty("id").GetString()!, d => d.GetProperty("items").GetArrayLength()) : new Dictionary<string,int>();
+            foreach (var diagram in request.Document.GetProperty("diagrams").EnumerateArray())
+                if (diagram.GetProperty("items").GetArrayLength() > Math.Max(old.GetValueOrDefault(diagram.GetProperty("id").GetString()!), limits.CanvasMaximumObjects))
+                    return Result<ToolDocumentResponse>.Failure(new("Workshop.CanvasCapacity", $"Each UML canvas supports {limits.CanvasMaximumObjects:N0} elements.", ErrorType.Validation));
+        }
         if (tool is "ui-editor" or "notes")
         {
             var previous = await documents.Get(organizationId, projectId, tool, ct);

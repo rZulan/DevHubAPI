@@ -12,10 +12,10 @@ internal sealed class ApiDocumentMetadataTransformer : IOpenApiDocumentTransform
     {
         document.Info = new OpenApiInfo
         {
-            Title = "DevHub API",
+            Title = "Zevont API",
             Version = "v1",
             Description =
-                "API for DevHub accounts and user profiles. " +
+                "API for Zevont accounts and user profiles. " +
                 "Authentication endpoints issue both an HTTP-only authentication cookie " +
                 "and a JWT access/refresh token pair. Protected endpoints accept either " +
                 "the authentication cookie or an `Authorization: Bearer <token>` header."
