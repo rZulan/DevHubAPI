@@ -30,6 +30,14 @@ The GitHub SQL suite requires a local SQL Server and refuses a remote database. 
 
 ## Deployment
 
-Publish the API component using `tools/publish.ps1 -Target Api`; omit `-Migrate`. The existing release workflow retains prior application files and restores them if startup or HTTPS checks fail.
+**Deployed and verified.** API release `20261103171443-19fb0122` contains source commit `688984ecbb5c2869d9ee32655c4567d0f8ebf3fb` and was verified on 3 November 2026 at approximately 17:17 Asia/Manila.
+
+- The self-contained Linux publish succeeded; the production API and Nginx services are active.
+- Fifteen server-side JWT checks passed against the running production validator. A correctly signed HS256 token reached subject validation; HS384/HS512, wrong/missing type, critical headers, unsigned or tampered tokens, wrong keys, expired tokens, and wrong issuer/audience were rejected. Synthetic invalid subjects stopped before user lookup; production keys and tokens stayed on the server.
+- Eleven public HTTPS checks passed: homepage/login 200, private API 401, both providers using code + S256 and their correct HTTPS callbacks, external return URLs rejected, and invalid state failing safely.
+- SHA-256 hashes of the deployed API and infrastructure assemblies matched the published local package.
+- Production configuration remains linked to `/etc/devhub/appsettings.Production.json`; persistent data-protection keys and prior release files were retained. No database migration or frontend deployment ran.
+
+The release used `tools/publish.ps1 -Target Api` without `-Migrate`. The existing release workflow retains prior application files and restores them if startup or HTTPS checks fail. Successful real-provider login/consent remains outside the automated checks.
 
 Immediate access-session revocation remains outside this change: logout revokes refresh credentials, while already issued access tokens and copied authentication cookies remain valid until their configured expiration.
