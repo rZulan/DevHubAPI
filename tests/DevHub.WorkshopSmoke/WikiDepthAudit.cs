@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
-internal static class WikiSubpageAudit
+internal static class WikiDepthAudit
 {
     public static async Task Run()
     {
@@ -22,9 +22,19 @@ internal static class WikiSubpageAudit
         foreach (var json in documents)
         {
             using var document = JsonDocument.Parse(json);
-            var parents = document.RootElement.GetProperty("pages").EnumerateArray().Select(page => page.TryGetProperty("parentId", out var parent) && parent.ValueKind == JsonValueKind.String ? parent.GetString() : null);
-            overLimit += parents.Where(parent => parent is not null).GroupBy(parent => parent).Count(group => group.Count() > 2);
+            var parents = document.RootElement.GetProperty("pages").EnumerateArray().ToDictionary(page => page.GetProperty("id").GetString()!, page => page.TryGetProperty("parentId", out var parent) && parent.ValueKind == JsonValueKind.String ? parent.GetString() : null);
+            foreach (var id in parents.Keys)
+            {
+                var seen = new HashSet<string> {id};
+                var parent = parents[id];
+                while (parent is not null)
+                {
+                    if (!seen.Add(parent) || !parents.TryGetValue(parent, out var next)) throw new InvalidOperationException("Malformed wiki hierarchy.");
+                    parent = next;
+                }
+                if (seen.Count > 3) overLimit++;
+            }
         }
-        Console.WriteLine($"Wiki documents: {documents.Count}; parents exceeding two subpages: {overLimit}");
+        Console.WriteLine($"Wiki documents: {documents.Count}; pages exceeding two nested levels: {overLimit}");
     }
 }

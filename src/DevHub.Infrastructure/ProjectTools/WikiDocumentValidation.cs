@@ -36,11 +36,10 @@ internal static class WikiDocumentValidation
             var parent = parents[id];
             while (parent is not null)
             {
-                if (!parents.ContainsKey(parent) || !seen.Add(parent)) return false;
+                if (!parents.ContainsKey(parent) || !seen.Add(parent) || seen.Count > 3) return false;
                 parent = parents[parent];
             }
         }
-        if (parents.Values.Where(parent => parent is not null).GroupBy(parent => parent).Any(group => group.Count() > 2)) return false;
         return ids.Count == 0 ? home.ValueKind == JsonValueKind.Null : home.ValueKind == JsonValueKind.String && ids.Contains(home.GetString()!);
     }
 }

@@ -111,7 +111,8 @@ the local database (writes are rolled back) with
 
 Project Wiki uses `GET|PUT /api/organizations/{organizationId}/projects/{projectId}/tools/wiki`.
 Members who can view a project can read its wiki; writes require **Manage wiki** (or
-owner/Administrator access). Saves use the shared document revision to reject stale
+owner/Administrator access). Pages support two nested levels below a top-level page,
+with no per-parent subpage limit within the 100-page total. Saves use the shared document revision to reject stale
 writes and notify connected project viewers. A wiki supports up to 100 Markdown pages,
 100,000 characters per page, 20 previous versions per page, and a 4,000,000-character
 document. The `AddProjectWiki` migration adds independent wiki storage and revision

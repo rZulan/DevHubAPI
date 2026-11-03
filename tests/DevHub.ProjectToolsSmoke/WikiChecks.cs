@@ -26,8 +26,11 @@ internal static class WikiChecks
         var second = child with {id = "second", slug = "second", title = "Second"};
         var third = child with {id = "third", slug = "third", title = "Third"};
         Check(Valid([page, child, second]), "Two direct subpages are accepted");
-        Check(!Valid([page, child, second, third]), "A third direct subpage is rejected");
-        Check(Valid([page, child, second, third with {parentId = "child"}]), "Each nested page has its own two-subpage allowance");
+        Check(Valid([page, child, second, third]), "More than two direct subpages are accepted");
+        Check(Valid([page, child, second, third with {parentId = "child"}]), "Two nested levels are accepted");
+        var deep = child with {id = "deep", slug = "deep", title = "Deep", parentId = "third"};
+        Check(!Valid([page, child, third with {parentId = "child"}, deep]), "A third nested level is rejected");
+        Check(Valid([page, .. Enumerable.Range(0, 99).Select(i => (object)(child with {id = $"p{i}", slug = $"page-{i}", title = $"Page {i}"}))]), "99 direct subpages fit the 100-page total limit");
         Check(Valid([page, child with {parentId = null}, second with {parentId = null}, third with {parentId = null}]), "Top-level pages are not restricted to two");
         Check(Valid([page, child with {parentId = null}]), "Explicit top-level wiki page accepted");
         Check(!Valid([page, child with {parentId = "missing"}]), "Missing parent rejected");

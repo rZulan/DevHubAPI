@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using DevHub.Api.Realtime;
 
 if (args.Contains("--ownership-audit")) {await OwnershipAudit.Run("zulan"); return;}
-if (args.Contains("--wiki-subpage-audit")) {await WikiSubpageAudit.Run(); return;}
+if (args.Contains("--wiki-depth-audit")) {await WikiDepthAudit.Run(); return;}
 await OrganizationSettingsChecks.Run();
 await InviteCodeChecks.Run();
 await AvatarChecks.Run();
