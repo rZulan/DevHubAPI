@@ -2,6 +2,7 @@ using System.Text;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Text.Json;
+using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.OAuth;
@@ -14,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.IdentityModel.JsonWebTokens;
 using DevHub.Application.Abstractions.Authentication;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Infrastructure.Authentication;
@@ -139,6 +141,10 @@ public static class DependencyInjection
                     ValidAudience = jwtOptions.Audience,
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                    ValidTypes = ["JWT"],
+                    RequireSignedTokens = true,
+                    RequireExpirationTime = true,
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
@@ -151,6 +157,26 @@ public static class DependencyInjection
                             context.Token = context.Request.Query["access_token"];
                         }
 
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = context =>
+                    {
+                        var encodedHeader = context.SecurityToken switch
+                        {
+                            JsonWebToken token => token.EncodedHeader,
+                            JwtSecurityToken token => token.EncodedHeader,
+                            _ => null
+                        };
+                        if (encodedHeader is null)
+                        {
+                            context.Fail("Unsupported JWT format.");
+                            return Task.CompletedTask;
+                        }
+
+                        using var header = JsonDocument.Parse(Base64UrlEncoder.DecodeBytes(encodedHeader));
+                        // This issuer defines no critical JOSE extensions.
+                        if (header.RootElement.TryGetProperty("crit", out _))
+                            context.Fail("JWT critical headers are not supported.");
                         return Task.CompletedTask;
                     }
                 };
@@ -289,14 +315,7 @@ public static class DependencyInjection
         var avatarUrl = user.TryGetProperty("avatar_url", out var avatarElement)
             ? avatarElement.GetString()
             : null;
-        var email = user.TryGetProperty("email", out var emailElement)
-            ? emailElement.GetString()
-            : null;
-
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            email = await GetVerifiedGitHubEmailAsync(context);
-        }
+        var email = await GetVerifiedGitHubEmailAsync(context);
 
         var identity = (ClaimsIdentity)context.Principal!.Identity!;
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, providerUserId));

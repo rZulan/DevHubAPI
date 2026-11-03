@@ -104,6 +104,18 @@ var mismatched = await Send(HttpMethod.Get, callback, cookie: wrongSession + "; 
 Check(mismatched.Headers.Location!.Query.Contains("failed") && fake.CodeExchanges == 0, "callback is bound to the initiating DevHub session");
 var success = await Send(HttpMethod.Get, callback, cookie: session + "; " + flowCookie);
 Check(success.Headers.Location!.Query.Contains("connected") && fake.CodeExchanges == 1 && fake.UsedVerifier, "valid callback stores connection using PKCE verifier");
+var installStart = await Send(HttpMethod.Post, "/api/integrations/github/authorize?install=true", user);
+var installUrl = new Uri((await Read(installStart)).GetProperty("url").GetString()!);
+var installQuery = QueryHelpers.ParseQuery(installUrl.Query);
+var installCookie = installStart.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+var afterInstall = await Send(HttpMethod.Get, $"/api/integrations/github/callback?code=installation-code&state={installQuery["state"]}", cookie: session + "; " + installCookie);
+Check(fake.CodeExchanges == 1 && afterInstall.Headers.Location?.AbsolutePath == "/login/oauth/authorize", "installation code is not exchanged without PKCE");
+var renewedQuery = QueryHelpers.ParseQuery(afterInstall.Headers.Location!.Query);
+var renewedCookie = afterInstall.Headers.GetValues("Set-Cookie").Select(value => value.Split(';')[0])
+    .Single(value => value.StartsWith("__Host-DevHub.GitHubIntegration=", StringComparison.Ordinal) && !value.EndsWith('='));
+Check(renewedQuery["state"] != installQuery["state"] && renewedQuery["code_challenge_method"] == "S256", "installation transitions to a fresh PKCE authorization");
+var afterAuthorization = await Send(HttpMethod.Get, $"/api/integrations/github/callback?code=valid-code&state={renewedQuery["state"]}", cookie: session + "; " + renewedCookie);
+Check(afterAuthorization.Headers.Location!.Query.Contains("connected") && fake.CodeExchanges == 2 && fake.UsedVerifier, "post-install PKCE authorization stores the GitHub connection");
 await using (var scope = app.Services.CreateAsyncScope()) {
     var stored = await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Set<GitHubConnection>().SingleAsync();
     Check(stored.UserId == user && stored.ProtectedAccessToken != "fake-access" && stored.ProtectedRefreshToken != "fake-refresh", "GitHub access and refresh tokens are protected in SQL");

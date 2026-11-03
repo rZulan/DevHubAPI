@@ -37,7 +37,7 @@ public sealed class GitHubIntegrationController(GitHubIntegration github, IDataP
 {
     private const string FlowCookie = "__Host-DevHub.GitHubIntegration";
     private readonly IDataProtector stateProtector = protection.CreateProtector("DevHub.GitHub.OAuthState.v1");
-    private sealed record Flow(Guid UserId, string State, string Verifier, DateTimeOffset Until);
+    private sealed record Flow(Guid UserId, string State, string Verifier, DateTimeOffset Until, bool Installation = false);
 
     [HttpGet("status")]
     public async Task<IActionResult> Status(CancellationToken ct) => TryGetAuthenticatedUserId(out var userId)
@@ -48,17 +48,21 @@ public sealed class GitHubIntegrationController(GitHubIntegration github, IDataP
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         if (!github.Configured) return Problem(statusCode: 503, title: "GitHub integration is not configured.");
+        return Ok(new {url = BeginFlow(userId, install)});
+    }
+
+    private string BeginFlow(Guid userId, bool install)
+    {
         var state = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
-        var verifier = install ? "" : WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+        var verifier = WebEncoders.Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
         var until = clock.GetUtcNow().AddMinutes(10);
-        Response.Cookies.Append(FlowCookie, stateProtector.Protect(JsonSerializer.Serialize(new Flow(userId, state, verifier, until))),
+        Response.Cookies.Append(FlowCookie, stateProtector.Protect(JsonSerializer.Serialize(new Flow(userId, state, verifier, until, install))),
             new CookieOptions {HttpOnly = true, Secure = true, SameSite = SameSiteMode.Lax, Path = "/", Expires = until, IsEssential = true});
-        var url = install ? QueryHelpers.AddQueryString(github.InstallUrl, "state", state) : QueryHelpers.AddQueryString("https://github.com/login/oauth/authorize", new Dictionary<string, string?> {
+        return install ? QueryHelpers.AddQueryString(github.InstallUrl, "state", state) : QueryHelpers.AddQueryString("https://github.com/login/oauth/authorize", new Dictionary<string, string?> {
             ["client_id"] = github.ClientId, ["redirect_uri"] = github.CallbackUrl, ["state"] = state,
             ["code_challenge"] = WebEncoders.Base64UrlEncode(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))),
             ["code_challenge_method"] = "S256", ["scope"] = "offline_access"
         });
-        return Ok(new {url});
     }
 
     [AllowAnonymous]
@@ -75,10 +79,16 @@ public sealed class GitHubIntegrationController(GitHubIntegration github, IDataP
             var flow = cookie is null ? null : JsonSerializer.Deserialize<Flow>(stateProtector.Unprotect(cookie));
             if (flow is not null && session.Succeeded && Guid.TryParse(subject, out var userId) && userId == flow.UserId
                 && flow.Until > clock.GetUtcNow() && state is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(state), Encoding.UTF8.GetBytes(flow.State))
-                && error is null && !string.IsNullOrWhiteSpace(code))
+                && error is null)
             {
-                await github.Connect(userId, code, flow.Verifier, ct);
-                success = true;
+                // Installation redirects do not bind their code to a PKCE challenge.
+                // Start a fresh authorization before exchanging any user credential.
+                if (flow.Installation) return Redirect(BeginFlow(userId, false));
+                if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(flow.Verifier))
+                {
+                    await github.Connect(userId, code, flow.Verifier, ct);
+                    success = true;
+                }
             }
         } catch (Exception e) when (e is CryptographicException or JsonException or GitHubIntegrationException or HttpRequestException or TaskCanceledException) { }
         var frontend = (config["Frontend:BaseUrl"] ?? "http://localhost:5173").TrimEnd('/');

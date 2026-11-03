@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-11-03
+
+### Authentication hardening
+- Pin access-token validation to HS256 and the JWT type; reject unsupported critical JOSE headers.
+- Resolve GitHub sign-in emails from explicitly verified provider email records, including public-profile email cases.
+- Follow GitHub App installation with a fresh, session-bound S256 authorization instead of exchanging an installation code without PKCE.
+- Reject legacy or invalid verifier values before exchanging repository integration credentials.
+- Add isolated authentication regressions and disposable-SQL coverage for the installation-to-authorization flow; no database migration is required.
+
 ## 2026-10-30
 
 ### Workshop quotas

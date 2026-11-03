@@ -42,8 +42,9 @@ public sealed class GitHubIntegration(ApplicationDbContext db, HttpClient http, 
 
     public async Task Connect(Guid userId, string code, string verifier, CancellationToken ct)
     {
-        var fields = new Dictionary<string, string> { ["code"] = code, ["redirect_uri"] = CallbackUrl };
-        if (verifier.Length > 0) fields["code_verifier"] = verifier;
+        if (verifier.Length is < 43 or > 128 || verifier.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '.' and not '_' and not '~'))
+            throw new GitHubIntegrationException("Restart GitHub authorization to reconnect.", 409);
+        var fields = new Dictionary<string, string> { ["code"] = code, ["redirect_uri"] = CallbackUrl, ["code_verifier"] = verifier };
         using var result = await Exchange(fields, ct);
         var root = result.RootElement;
         var access = root.GetProperty("access_token").GetString()!;
