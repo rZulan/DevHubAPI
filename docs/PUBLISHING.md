@@ -65,3 +65,25 @@ ssh root@157.230.58.33 "journalctl -u devhub -n 50 --no-pager"
 
 Rider documentation: https://www.jetbrains.com/help/rider/Configuring_Third-Party_Tools.html
 
+## Publish the admin and docs sites
+
+At the DNS provider for `dev-hub.site`, add DNS-only A records for `admin` and `docs` pointing to `157.230.58.33`. The server needs Certbot and a registered Let's Encrypt account. If the Ubuntu Droplet has no Certbot installation, install the `certbot` package and use `certbot register` on the Droplet to create the account. The deployment uses HTTP validation on port 80 and then enables HTTPS on both subdomains.
+
+From PowerShell in the API directory, run the first deployment with your existing SSH key unlocked in the Windows SSH agent.
+
+```powershell
+.\tools\publish-subsites.ps1 -Configure
+```
+
+Sign in to Zevont and open [your account profile endpoint](https://dev-hub.site/api/users/me) to find the account GUID. Enter the GUID when PowerShell prompts for it. Use a Zevont account with an email and password to sign in to the admin site. The configured account can view platform totals and the 12 newest users, organizations, and bug reports. The first deployment publishes the API too, which briefly restarts that service. Admin access uses server configuration and requires no database migration.
+
+Use **Publish Admin** or **Publish Docs** in WebStorm for later frontend updates, or run:
+
+```powershell
+.\tools\publish-subsites.ps1 -Target Admin
+.\tools\publish-subsites.ps1 -Target Docs
+.\tools\publish-subsites.ps1 -BuildOnly
+```
+
+For a local admin session, set `PlatformAdmin__UserIds__0` to an approved local account GUID in the PowerShell session that starts the API. Run `npm run dev:admin` from the client and open `http://localhost:5174`. The Vite server proxies API requests to the local HTTPS API. Edit the Markdown in `client/sites/docs` and run `npm run build:docs` to render the public guides.
+
