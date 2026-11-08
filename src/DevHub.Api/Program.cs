@@ -13,6 +13,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddBugReportRateLimiting();
 builder.Services.AddRequestSecurity(builder.Configuration);
+var platformAdmin = new PlatformAdminAccess(builder.Configuration);
+builder.Services.AddSingleton(platformAdmin);
+builder.Services.AddAuthorization(options => options.AddPolicy(PlatformAdminAccess.Policy, platformAdmin.ConfigurePolicy));
 builder.WebHost.ConfigureKestrel(options =>
 {
     options.AddServerHeader = false;

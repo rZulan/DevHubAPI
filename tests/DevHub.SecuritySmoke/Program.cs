@@ -20,6 +20,9 @@ void Check(bool condition, string message)
     if (!condition) throw new InvalidOperationException(message);
     Console.WriteLine($"PASS {message}"); checks++;
 }
+await PlatformAdminChecks.RunAsync(Check);
+if (args is ["--platform-admin-only"]) return;
+
 var builder = WebApplication.CreateBuilder();
 builder.Logging.ClearProviders();
 builder.WebHost.UseUrls("http://127.0.0.1:0");

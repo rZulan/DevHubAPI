@@ -40,6 +40,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<DevHub.Application.Administration.IPlatformOverview, DevHub.Infrastructure.Administration.PlatformOverviewReader>();
         services.AddDataProtection();
         services.AddHttpClient<DevHub.Infrastructure.GitHub.GitHubIntegration>(client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddScoped<DevHub.Application.GitHub.IGitHubRepositoryResolver>(sp => sp.GetRequiredService<DevHub.Infrastructure.GitHub.GitHubIntegration>());
