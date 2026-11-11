@@ -42,7 +42,11 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         var total = await query.CountAsync(ct);
         var items = await query.OrderByDescending(r => r.CreatedAtUtc).ThenBy(r => r.Id).Skip(page * 25).Take(25)
             .Select(r => new BugSummary(r.Id, r.Reference, r.Email, r.Title, r.Status, r.Priority, r.CategoryId, r.Source, r.CreatedAtUtc, r.Attachments.Count)).ToListAsync(ct);
-        return Result<BugInboxResponse>.Success(new(items, total, await all.CountAsync(r => r.Status == "new", ct), await all.CountAsync(r => r.Status != "resolved" && r.Status != "closed", ct), await all.CountAsync(r => r.Status == "resolved" || r.Status == "closed", ct), await Categories(scope.ProjectId, ct)));
+        var statusCounts = await all.GroupBy(r => r.Status).Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(group => group.Status, group => group.Count, ct);
+        var resolved = statusCounts.GetValueOrDefault("resolved") + statusCounts.GetValueOrDefault("closed");
+        return Result<BugInboxResponse>.Success(new(items, total, statusCounts.GetValueOrDefault("new"), statusCounts.Values.Sum() - resolved,
+            resolved, await Categories(scope.ProjectId, ct), statusCounts));
     }
     private IQueryable<BugDetail> Details(Guid projectId, Guid reportId) => db.BugReports.AsNoTracking().Where(r => r.ProjectId == projectId && r.Id == reportId)
         .Select(r => new BugDetail(r.Id, r.Reference, r.Email, r.Title, r.Description, r.Steps, r.Environment, r.Status, r.Priority, r.CategoryId, r.InternalNotes, r.Source, r.CreatedAtUtc, r.UpdatedAtUtc, r.Revision, r.Attachments.Select(a => new BugAttachmentResponse(a.Id, a.FileName, a.ContentType, a.Size)).ToList()));

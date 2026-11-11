@@ -32,7 +32,8 @@ public sealed record SaveOrganizationRoleRequest(
 public sealed record MoveOrganizationRoleRequest([Range(-1, 1)] int Direction);
 
 public sealed record SaveOrganizationDashboardRequest(
-    [Required] IReadOnlyList<DashboardWidgetDefinition> Widgets);
+    [Required] IReadOnlyList<DashboardWidgetDefinition> Widgets,
+    int? WidgetGap = null);
 
 public sealed record ChangeOrganizationMemberNicknameRequest([StringLength(80)] string? Nickname);
 
@@ -276,6 +277,7 @@ public sealed class OrganizationsController(
     }
 
     [HttpPut("{organizationId:guid}/dashboard")]
+    [RequestSizeLimit(8_000_000)]
     [EndpointName("PublishOrganizationDashboard")]
     [ProducesResponseType<OrganizationDashboardResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> PublishDashboard(
@@ -285,7 +287,7 @@ public sealed class OrganizationsController(
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await sender.Send(new PublishOrganizationDashboardCommand(
-            organizationId, userId, request.Widgets), cancellationToken);
+            organizationId, userId, request.Widgets, request.WidgetGap), cancellationToken);
         if (!result.IsSuccess) return Failure(result.Error!);
 
         await workshopHub.Clients.Group(WorkshopHub.GetGroupName(organizationId)).SendAsync(
@@ -304,12 +306,13 @@ public sealed class OrganizationsController(
     }
 
     [HttpPut("{organizationId:guid}/dashboard/personal")]
+    [RequestSizeLimit(8_000_000)]
     [EndpointName("SavePersonalDashboard")]
     [ProducesResponseType<PersonalDashboardResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> SavePersonalDashboard(Guid organizationId, [FromBody] SaveOrganizationDashboardRequest request, CancellationToken cancellationToken)
     {
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
-        var result = await sender.Send(new SavePersonalDashboardCommand(organizationId, userId, request.Widgets), cancellationToken);
+        var result = await sender.Send(new SavePersonalDashboardCommand(organizationId, userId, request.Widgets, request.WidgetGap), cancellationToken);
         // Personal layouts are never broadcast to other organization members.
         return result.IsSuccess ? Ok(result.Value) : Failure(result.Error!);
     }

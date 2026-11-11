@@ -358,6 +358,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset?>("DashboardPublishedAtUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<int?>("DashboardWidgetGap")
+                        .HasColumnType("int");
+
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -568,6 +571,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("PersonalDashboardSavedAtUtc")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("PersonalDashboardWidgetGap")
+                        .HasColumnType("int");
 
                     b.HasKey("OrganizationId", "UserId");
 
@@ -1056,6 +1062,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<DateTimeOffset?>("FinishedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -1096,6 +1105,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTimeOffset?>("FinishedAtUtc")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");

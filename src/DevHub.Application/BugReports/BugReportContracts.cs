@@ -11,7 +11,8 @@ public sealed record SubmitBugRequest(Guid SubmissionId, string Email, string Ti
 public sealed record BugReceipt(string Reference);
 public sealed record BugAttachmentResponse(Guid Id, string FileName, string ContentType, int Size);
 public sealed record BugSummary(Guid Id, string Reference, string Email, string Title, string Status, string Priority, Guid? CategoryId, string Source, DateTimeOffset CreatedAtUtc, int AttachmentCount);
-public sealed record BugInboxResponse(IReadOnlyList<BugSummary> Items, int Total, int NewCount, int OpenCount, int ResolvedCount, IReadOnlyList<BugCategoryResponse> Categories);
+public sealed record BugInboxResponse(IReadOnlyList<BugSummary> Items, int Total, int NewCount, int OpenCount, int ResolvedCount, IReadOnlyList<BugCategoryResponse> Categories,
+    IReadOnlyDictionary<string, int>? StatusCounts = null);
 public sealed record BugDetail(Guid Id, string Reference, string Email, string Title, string Description, string Steps, string Environment, string Status, string Priority, Guid? CategoryId, string InternalNotes, string Source, DateTimeOffset CreatedAtUtc, DateTimeOffset? UpdatedAtUtc, int Revision, IReadOnlyList<BugAttachmentResponse> Attachments);
 public sealed record TriageBugRequest(int Revision, string Status, string Priority, Guid? CategoryId, string InternalNotes);
 public sealed record BugAttachmentDownload(string FileName, string ContentType, byte[] Content);

@@ -8,7 +8,9 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 if ($Configure -and ($Target -eq 'Docs' -or $BuildOnly)) { throw '-Configure requires an admin deployment.' }
-$client = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'client'
+$workspace = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$client = Join-Path $workspace 'client'
+$docs = Join-Path $workspace 'docs'
 $sites = if ($Target -eq 'All') { @('admin', 'docs') } else { @($Target.ToLowerInvariant()) }
 $serverIp = '157.230.58.33'
 $server = "root@$serverIp"
@@ -55,16 +57,27 @@ if (-not $BuildOnly) {
 
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
 $uploads = @()
-Push-Location $client
-try {
-    if (-not (Test-Path 'node_modules/vite/package.json')) { Invoke-Checked npm.cmd @('ci') }
-    foreach ($site in $sites) {
-        Invoke-Checked npm.cmd @('run', "build:$site")
-        $archive = Join-Path $staging "$site.tar.gz"
-        Invoke-Checked tar.exe @('-czf', $archive, '-C', (Join-Path $client "sites/$site/dist"), '.')
-        $uploads += (Resolve-Path -LiteralPath $archive).Path
+foreach ($site in $sites) {
+    $buildRoot = $client
+    $buildScript = "build:$site"
+    $output = Join-Path $client "sites/$site/dist"
+    $installedPackage = 'node_modules/vite/package.json'
+    if ($site -eq 'docs' -and (Test-Path -LiteralPath (Join-Path $docs 'build.mjs'))) {
+        $buildRoot = $docs
+        $buildScript = 'build'
+        $output = Join-Path $docs 'dist'
+        $installedPackage = 'node_modules/react-markdown/package.json'
     }
-} finally { Pop-Location }
+
+    Push-Location $buildRoot
+    try {
+        if (-not (Test-Path -LiteralPath $installedPackage)) { Invoke-Checked npm.cmd @('ci') }
+        Invoke-Checked npm.cmd @('run', $buildScript)
+        $archive = Join-Path $staging "$site.tar.gz"
+        Invoke-Checked tar.exe @('-czf', $archive, '-C', $output, '.')
+        $uploads += (Resolve-Path -LiteralPath $archive).Path
+    } finally { Pop-Location }
+}
 
 if ($BuildOnly) { Write-Host "Subsite packages built in $staging"; return }
 

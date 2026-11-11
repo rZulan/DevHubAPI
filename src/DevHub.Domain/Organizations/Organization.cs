@@ -32,6 +32,7 @@ public sealed class Organization : BaseEntity
     public string? AvatarUrl { get; private set; }
     public string? DashboardLayoutJson { get; private set; }
     public DateTimeOffset? DashboardPublishedAtUtc { get; private set; }
+    public int? DashboardWidgetGap { get; private set; }
     public IReadOnlyCollection<OrganizationMember> Members => _members;
     public IReadOnlyCollection<OrganizationRole> Roles => _roles;
     public IReadOnlyCollection<Team> Teams => _teams;
@@ -73,10 +74,11 @@ public sealed class Organization : BaseEntity
         MarkUpdated(updatedAtUtc);
     }
 
-    public void PublishDashboard(string dashboardLayoutJson, DateTimeOffset publishedAtUtc)
+    public void PublishDashboard(string dashboardLayoutJson, DateTimeOffset publishedAtUtc, int? widgetGap = null)
     {
         DashboardLayoutJson = dashboardLayoutJson;
         DashboardPublishedAtUtc = publishedAtUtc;
+        if (widgetGap.HasValue) DashboardWidgetGap = widgetGap;
         MarkUpdated(publishedAtUtc);
     }
 

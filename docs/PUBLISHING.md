@@ -85,5 +85,7 @@ Use **Publish Admin** or **Publish Docs** in WebStorm for later frontend updates
 .\tools\publish-subsites.ps1 -BuildOnly
 ```
 
-For a local admin session, set `PlatformAdmin__UserIds__0` to an approved local account GUID in the PowerShell session that starts the API. Run `npm run dev:admin` from the client and open `http://localhost:5174`. The Vite server proxies API requests to the local HTTPS API. Edit the Markdown in `client/sites/docs` and run `npm run build:docs` to render the public guides.
+For a local admin session, set `PlatformAdmin__UserIds__0` to an approved local account GUID in the PowerShell session that starts the API. Run `npm run dev:admin` from the client and open `http://localhost:5174`. The Vite server proxies API requests to the local HTTPS API.
+
+Clone [ZevontDocs](https://github.com/rZulan/ZevontDocs) into a `docs` folder alongside `api` and `client`. **Publish Docs** builds that checkout when it is present. Workspaces without a standalone checkout use the guides in `client/sites/docs`.
 

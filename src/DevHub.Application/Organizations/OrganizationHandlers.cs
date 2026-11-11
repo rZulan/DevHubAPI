@@ -1,6 +1,7 @@
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
 using DevHub.Application.Users;
+using DevHub.Domain.Common;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Users;
 using MediatR;
@@ -502,23 +503,6 @@ internal sealed class AcceptOrganizationInviteCommandHandler(
 
 internal static class OrganizationDashboard
 {
-    private static readonly HashSet<string> SupportedTypes =
-    [
-        "welcome",
-        "quick-actions",
-        "quick-action-project",
-        "quick-action-tasks",
-        "quick-action-idea",
-        "quick-action-team",
-        "assigned-tasks",
-        "project-stats",
-        "recent-activity",
-        "online-members",
-        "project-overview",
-        "team-distribution",
-        "text"
-    ];
-
     private static readonly HashSet<string> SupportedSizes = ["full", "two-thirds", "half", "third", "sixth"];
 
     private static readonly Dictionary<string, (double Width, double Height)> MinimumDimensions = new(StringComparer.Ordinal)
@@ -539,9 +523,10 @@ internal static class OrganizationDashboard
     };
 
     public static IReadOnlyDictionary<string, string[]> Validate(
-        IReadOnlyList<DashboardWidgetDefinition> widgets)
+        IReadOnlyList<DashboardWidgetDefinition> widgets, int? widgetGap)
     {
         var errors = new Dictionary<string, string[]>();
+        if (widgetGap is < 8 or > 24) errors[nameof(widgetGap)] = ["Widget gap must be between 8 and 24 pixels."];
         if (widgets.Count > 30)
         {
             errors[nameof(widgets)] = ["A dashboard can contain at most 30 widgets."];
@@ -550,11 +535,12 @@ internal static class OrganizationDashboard
 
         if (widgets.Any(widget =>
             string.IsNullOrWhiteSpace(widget.Id) || widget.Id.Length > 100 ||
-            !SupportedTypes.Contains(widget.Type) ||
+            widget.Type is null ||
             !SupportedSizes.Contains(widget.Size) ||
             !HasValidDimensions(widget) ||
             (widget.SectionId is not null && (string.IsNullOrWhiteSpace(widget.SectionId) || widget.SectionId.Length > 100)) ||
-            (widget.Content?.Length ?? 0) > 2000))
+            !HasValidAppearance(widget.Appearance) ||
+            !HasValidContent(widget)))
         {
             errors[nameof(widgets)] = ["One or more dashboard widgets are invalid."];
         }
@@ -567,7 +553,14 @@ internal static class OrganizationDashboard
 
     private static bool HasValidDimensions(DashboardWidgetDefinition widget)
     {
-        var minimum = MinimumDimensions[widget.Type];
+        var fixedSize = false;
+        (double Width, double Height) minimum;
+        if (NewDimensions.TryGetValue(widget.Type, out var template))
+        {
+            minimum = (template.Width, template.Height);
+            fixedSize = template.Fixed;
+        }
+        else if (!MinimumDimensions.TryGetValue(widget.Type, out minimum)) return false;
         var width = widget.Width ?? widget.Size switch
         {
             "sixth" => 0.5,
@@ -576,29 +569,95 @@ internal static class OrganizationDashboard
             "two-thirds" => 3,
             _ => 4
         };
+        var image = widget.Type.StartsWith("image-", StringComparison.Ordinal);
+        // Older clients can still save the fixed chart sizes they already loaded.
+        if (widget.Type.StartsWith("graph-", StringComparison.Ordinal) && width == (widget.Type is "graph-tasks" or "graph-todos" or "graph-bugs" ? 1.5 : 2))
+            minimum.Width = width;
+        if (widget.Type == "info-org-members" && widget.Height == 0.5) minimum.Height = 0.5;
 
         return (widget.Column is null && widget.Row is null ||
-                widget.Column is >= 0 and < 8 && widget.Row is >= 0 and <= 120 && widget.Column + width * 2 <= 8) &&
-               width >= minimum.Width && width <= 4 && width * 2 % 1 == 0 &&
-               widget.Height >= minimum.Height && widget.Height <= 2 && widget.Height * 2 % 1 == 0;
+                widget.Column is >= 0 and < 10 && widget.Column * 2 % 1 == 0 && widget.Column + width * 2 <= 10 &&
+                widget.Row is >= 0 and <= 120 && widget.Row % 1 == 0) &&
+               width >= minimum.Width && width <= (image ? 5 : 4) && (fixedSize || width * 2 % 1 == 0) &&
+               widget.Height >= minimum.Height && widget.Height <= (image ? 4 : 2) && widget.Height * 2 % 1 == 0 &&
+               (!fixedSize || width == minimum.Width && widget.Height == minimum.Height);
+    }
+
+    private static bool HasValidAppearance(DashboardWidgetAppearance? appearance)
+    {
+        if (appearance is null) return true;
+        if (appearance.Radius is < 0 or > 48 || appearance.Opacity is < 0 or > 100) return false;
+        var color = appearance.Color;
+        return color is null or "primary" or "secondary" or "accent" or "muted" or "background" or "card" or "popover" or "sidebar"
+            || color.Length == 7 && color[0] == '#' && color.Skip(1).All(Uri.IsHexDigit);
+    }
+
+    private static bool HasValidContent(DashboardWidgetDefinition widget)
+    {
+        if (string.IsNullOrEmpty(widget.Content)) return true;
+        if (!widget.Type.StartsWith("image-", StringComparison.Ordinal))
+        {
+            var limit = widget.Type.StartsWith("text-rows-", StringComparison.Ordinal) ? 120000 : widget.Type == "text" ? 16000 : 2000;
+            return widget.Content.Length <= limit;
+        }
+
+        // A caption can store up to 250 separately formatted characters alongside the image.
+        const int metadataLimit = 60000;
+        if (widget.Content.Length > metadataLimit + AvatarImage.MaxLength) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(widget.Content);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
+            if (!document.RootElement.TryGetProperty("url", out var url) || url.ValueKind == JsonValueKind.Null)
+                return widget.Content.Length <= metadataLimit;
+            if (url.ValueKind != JsonValueKind.String || url.GetString() is not { } source) return false;
+            return source.StartsWith("data:", StringComparison.OrdinalIgnoreCase)
+                ? widget.Content.Length - source.Length <= metadataLimit && AvatarImage.IsValid(source)
+                : widget.Content.Length <= metadataLimit && source.Length <= 900;
+        }
+        catch (JsonException) { return false; }
+    }
+
+    private static readonly Dictionary<string, (double Width, double Height, bool Fixed)> NewDimensions = BuildWidgetDimensions();
+
+    private static Dictionary<string, (double Width, double Height, bool Fixed)> BuildWidgetDimensions()
+    {
+        var result = new Dictionary<string, (double, double, bool)>(StringComparer.Ordinal);
+        foreach (var link in new[] { "teams", "org-chart", "sdlc", "todo", "calendar", "bug-reports", "erd", "ui-editor", "uml", "project-wiki", "project" })
+        {
+            result.Add($"link-{link}-card", (1.25, 1, true));
+            result.Add($"link-{link}-chip", (1, 0.5, true));
+        }
+        foreach (var rows in new[] { 1, 2, 3 }) result.Add($"text-rows-{rows}", (1, rows == 3 ? 1 : 0.5, false));
+        foreach (var frame in new[] { "top", "top-inset", "left", "right", "left-inset", "right-inset", "full", "rounded" })
+            result.Add($"image-{frame}", (0.5, 0.5, false));
+        foreach (var graph in new[] { "tasks", "todos", "bugs" })
+            result.Add($"graph-{graph}", (2.5, 1, true));
+        result.Add("graph-bug-status", (2.5, 1.5, true));
+        foreach (var graph in new[] { "todo-activity", "task-activity" })
+            result.Add($"graph-{graph}", (2.5, 1, true));
+        result.Add("info-org-members", (1.5, 1, true));
+        foreach (var info in new[] { "org-todos", "team-todos", "personal-todos", "org-tasks", "team-tasks", "personal-tasks", "schedule", "org-teams", "team-members" })
+            result.Add($"info-{info}", (1.5, 1, false));
+        return result;
     }
 
     public static OrganizationDashboardResponse ToDashboardResponse(this Organization organization)
     {
         if (string.IsNullOrWhiteSpace(organization.DashboardLayoutJson))
         {
-            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc);
+            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc, organization.DashboardWidgetGap);
         }
 
         try
         {
             var widgets = JsonSerializer.Deserialize<DashboardWidgetDefinition[]>(
                 organization.DashboardLayoutJson) ?? [];
-            return new OrganizationDashboardResponse(widgets, organization.DashboardPublishedAtUtc);
+            return new OrganizationDashboardResponse(widgets, organization.DashboardPublishedAtUtc, organization.DashboardWidgetGap);
         }
         catch (JsonException)
         {
-            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc);
+            return new OrganizationDashboardResponse([], organization.DashboardPublishedAtUtc, organization.DashboardWidgetGap);
         }
     }
 }
@@ -628,7 +687,7 @@ internal sealed class PublishOrganizationDashboardCommandHandler(
         PublishOrganizationDashboardCommand request,
         CancellationToken cancellationToken)
     {
-        var errors = OrganizationDashboard.Validate(request.Widgets);
+        var errors = OrganizationDashboard.Validate(request.Widgets, request.WidgetGap);
         if (errors.Count > 0)
         {
             return Result<OrganizationDashboardResponse>.Failure(OrganizationErrors.Invalid(errors));
@@ -647,7 +706,7 @@ internal sealed class PublishOrganizationDashboardCommandHandler(
         }
 
         organization.PublishDashboard(
-            JsonSerializer.Serialize(request.Widgets), timeProvider.GetUtcNow());
+            JsonSerializer.Serialize(request.Widgets), timeProvider.GetUtcNow(), request.WidgetGap);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return Result<OrganizationDashboardResponse>.Success(organization.ToDashboardResponse());
     }

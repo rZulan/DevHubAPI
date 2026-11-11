@@ -140,6 +140,8 @@ public sealed record CreateOrganizationInviteCommand(Guid OrganizationId, Guid R
 public sealed record AcceptOrganizationInviteCommand(string Token, Guid RequestingUserId)
     : IRequest<Result<OrganizationResponse>>;
 
+public sealed record DashboardWidgetAppearance(int? Radius = null, string? Color = null, int? Opacity = null);
+
 public sealed record DashboardWidgetDefinition(
     string Id,
     string Type,
@@ -148,16 +150,19 @@ public sealed record DashboardWidgetDefinition(
     double Height = 1,
     double? Width = null,
     string? SectionId = null,
-    int? Column = null,
-    int? Row = null);
+    double? Column = null, // Positions are in half-width units. Half steps align quarter-width cards.
+    double? Row = null, // Older saved layouts may still contain fractional row positions.
+    DashboardWidgetAppearance? Appearance = null);
 
 public sealed record OrganizationDashboardResponse(
     IReadOnlyList<DashboardWidgetDefinition> Widgets,
-    DateTimeOffset? PublishedAtUtc);
+    DateTimeOffset? PublishedAtUtc,
+    int? WidgetGap = null);
 
 public sealed record PersonalDashboardResponse(
     IReadOnlyList<DashboardWidgetDefinition> Widgets,
-    DateTimeOffset? SavedAtUtc);
+    DateTimeOffset? SavedAtUtc,
+    int? WidgetGap = null);
 
 public sealed record GetPersonalDashboardQuery(Guid OrganizationId, Guid RequestingUserId)
     : IRequest<Result<PersonalDashboardResponse>>;
@@ -165,7 +170,8 @@ public sealed record GetPersonalDashboardQuery(Guid OrganizationId, Guid Request
 public sealed record SavePersonalDashboardCommand(
     Guid OrganizationId,
     Guid RequestingUserId,
-    IReadOnlyList<DashboardWidgetDefinition> Widgets)
+    IReadOnlyList<DashboardWidgetDefinition> Widgets,
+    int? WidgetGap = null)
     : IRequest<Result<PersonalDashboardResponse>>;
 
 public sealed record GetOrganizationDashboardQuery(Guid OrganizationId, Guid RequestingUserId)
@@ -174,5 +180,6 @@ public sealed record GetOrganizationDashboardQuery(Guid OrganizationId, Guid Req
 public sealed record PublishOrganizationDashboardCommand(
     Guid OrganizationId,
     Guid RequestingUserId,
-    IReadOnlyList<DashboardWidgetDefinition> Widgets)
+    IReadOnlyList<DashboardWidgetDefinition> Widgets,
+    int? WidgetGap = null)
     : IRequest<Result<OrganizationDashboardResponse>>;

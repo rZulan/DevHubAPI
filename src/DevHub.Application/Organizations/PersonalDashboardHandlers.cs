@@ -14,7 +14,7 @@ internal sealed class GetPersonalDashboardQueryHandler(IOrganizationRepository r
         if (member is null) return Result<PersonalDashboardResponse>.Failure(OrganizationErrors.NotFound);
         var widgets = string.IsNullOrEmpty(member.PersonalDashboardLayoutJson)
             ? [] : JsonSerializer.Deserialize<DashboardWidgetDefinition[]>(member.PersonalDashboardLayoutJson) ?? [];
-        return Result<PersonalDashboardResponse>.Success(new(widgets, member.PersonalDashboardSavedAtUtc));
+        return Result<PersonalDashboardResponse>.Success(new(widgets, member.PersonalDashboardSavedAtUtc, member.PersonalDashboardWidgetGap));
     }
 }
 
@@ -25,10 +25,10 @@ internal sealed class SavePersonalDashboardCommandHandler(IOrganizationRepositor
     {
         var member = await repository.GetDashboardMemberAsync(request.OrganizationId, request.RequestingUserId, cancellationToken);
         if (member is null) return Result<PersonalDashboardResponse>.Failure(OrganizationErrors.NotFound);
-        var errors = OrganizationDashboard.Validate(request.Widgets);
+        var errors = OrganizationDashboard.Validate(request.Widgets, request.WidgetGap);
         if (errors.Count > 0) return Result<PersonalDashboardResponse>.Failure(OrganizationErrors.Invalid(errors));
-        member.SavePersonalDashboard(JsonSerializer.Serialize(request.Widgets), clock.GetUtcNow());
+        member.SavePersonalDashboard(JsonSerializer.Serialize(request.Widgets), clock.GetUtcNow(), request.WidgetGap);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result<PersonalDashboardResponse>.Success(new(request.Widgets, member.PersonalDashboardSavedAtUtc));
+        return Result<PersonalDashboardResponse>.Success(new(request.Widgets, member.PersonalDashboardSavedAtUtc, member.PersonalDashboardWidgetGap));
     }
 }

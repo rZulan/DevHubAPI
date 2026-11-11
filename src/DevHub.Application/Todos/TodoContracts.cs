@@ -17,9 +17,9 @@ public sealed record UpdateTodoTaskRequest([Required, StringLength(150)] string 
     [StringLength(2000)] string? Description, [Required, StringLength(20)] string Status,
     [Required] IReadOnlyList<Guid> AssigneeIds, int BoardRevision, DateOnly? TargetDate = null, DateOnly? StartDate = null);
 public sealed record DeleteTodoTaskRequest(int BoardRevision);
-public sealed record TodoTaskResponse(Guid Id, Guid TodoId, Guid ProjectId, string Title, string Description, string Status, Guid? AssigneeId, IReadOnlyList<Guid> AssigneeIds, DateOnly? TargetDate = null, DateOnly? StartDate = null);
+public sealed record TodoTaskResponse(Guid Id, Guid TodoId, Guid ProjectId, string Title, string Description, string Status, Guid? AssigneeId, IReadOnlyList<Guid> AssigneeIds, DateOnly? TargetDate = null, DateOnly? StartDate = null, DateTimeOffset? FinishedAtUtc = null);
 public sealed record TodoResponse(Guid Id, Guid ProjectId, string Name, string Description, DateOnly? TargetDate,
-    DateTimeOffset CreatedAtUtc, IReadOnlyList<TodoTaskResponse> Tasks, IReadOnlyList<TodoColumn> Columns, int BoardRevision, DateOnly? StartDate = null);
+    DateTimeOffset CreatedAtUtc, IReadOnlyList<TodoTaskResponse> Tasks, IReadOnlyList<TodoColumn> Columns, int BoardRevision, DateOnly? StartDate = null, DateTimeOffset? FinishedAtUtc = null);
 
 public interface ITodoService
 {

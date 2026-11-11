@@ -29,6 +29,7 @@ public sealed class OrganizationMember
     public string? Nickname { get; private set; }
     public string? PersonalDashboardLayoutJson { get; private set; }
     public DateTimeOffset? PersonalDashboardSavedAtUtc { get; private set; }
+    public int? PersonalDashboardWidgetGap { get; private set; }
     /// <summary>The workshop color scheme this member chose for themselves.</summary>
     public string ColorSchemeId { get; private set; } = OrganizationColorScheme.DefaultId;
     public IReadOnlyCollection<OrganizationMemberRole> RoleAssignments => _roleAssignments;
@@ -44,10 +45,11 @@ public sealed class OrganizationMember
 
     internal void SetOwner(bool isOwner) => IsOwner = isOwner;
 
-    public void SavePersonalDashboard(string layoutJson, DateTimeOffset now)
+    public void SavePersonalDashboard(string layoutJson, DateTimeOffset now, int? widgetGap = null)
     {
         PersonalDashboardLayoutJson = layoutJson;
         PersonalDashboardSavedAtUtc = now;
+        if (widgetGap.HasValue) PersonalDashboardWidgetGap = widgetGap;
     }
 
     internal void ChangeNickname(string? nickname)

@@ -210,6 +210,20 @@ try
     Check(deletedBoard.BoardRevision == editedBoard.BoardRevision + 1, "Task delete increments board revision");
     Check(!await db.Set<TodoTaskAssignee>().AnyAsync(a => a.TaskId == editable.Id), "Task deletion removes assignee records");
     Check(!(await service.DeleteTask(org, project.Id, second.Id, editable.Id, owner, new(deletedBoard.BoardRevision), ct)).IsSuccess, "Already deleted task returns missing");
+    var completionBoard = Require(await service.Create(org, project.Id, owner, new("Completion tracking", null, null), ct));
+    var completionTask = Require(await service.AddTask(org, project.Id, completionBoard.Id, owner, new("Complete once", "", "pending"), ct));
+    var done = Require(await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, owner, new("done"), ct));
+    db.ChangeTracker.Clear();
+    var finishedBoard = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
+    Check(done.FinishedAtUtc is not null && finishedBoard.FinishedAtUtc == done.FinishedAtUtc &&
+        finishedBoard.Tasks.Single().FinishedAtUtc == done.FinishedAtUtc, "Task and TODO record the same completion transition after reload");
+    var renamedAfterCompletion = Require(await service.UpdateTask(org, project.Id, completionBoard.Id, completionTask.Id, owner,
+        new("Renamed after completion", "", "done", [], finishedBoard.BoardRevision), ct));
+    Check(renamedAfterCompletion.FinishedAtUtc == done.FinishedAtUtc, "Editing a finished task keeps its original completion date");
+    Require(await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, owner, new("pending"), ct));
+    db.ChangeTracker.Clear();
+    var reopened = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
+    Check(reopened.FinishedAtUtc is null && reopened.Tasks.Single().FinishedAtUtc is null, "Reopening clears current completion dates");
     Console.WriteLine("TODO persistence smoke checks passed.");
 }
 finally

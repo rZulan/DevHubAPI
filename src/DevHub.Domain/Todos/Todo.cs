@@ -19,6 +19,7 @@ public sealed class Todo : BaseEntity
     public string Description { get; private set; } = string.Empty;
     public DateOnly? TargetDate { get; private set; }
     public DateOnly? StartDate { get; private set; }
+    public DateTimeOffset? FinishedAtUtc { get; private set; }
     public void SetDates(DateOnly? startDate, DateOnly? targetDate, DateTimeOffset now)
     {
         TodoSchedule.Validate(startDate, targetDate);
@@ -29,6 +30,16 @@ public sealed class Todo : BaseEntity
     public int BoardRevision { get; private set; }
     public IReadOnlyList<TodoColumn> Columns => JsonSerializer.Deserialize<TodoColumn[]>(ColumnsJson)!;
     public ICollection<TodoTask> Tasks { get; private set; } = new List<TodoTask>();
+    public bool IsFinished()
+    {
+        var finishedColumn = Columns[^1].Id;
+        return Tasks.Count > 0 && Tasks.All(task => task.Status == finishedColumn);
+    }
+    public void RecordCompletion(bool wasFinished, DateTimeOffset now)
+    {
+        var finished = IsFinished();
+        if (finished != wasFinished) FinishedAtUtc = finished ? now : null;
+    }
     public void TouchBoard(DateTimeOffset now) { BoardRevision++; MarkUpdated(now); }
     public void ConfigureColumns(IReadOnlyList<TodoColumn> columns, DateTimeOffset now)
     {
@@ -71,6 +82,12 @@ public sealed class TodoTask : BaseEntity
     public Guid? AssigneeId { get; private set; }
     public DateOnly? StartDate { get; private set; }
     public DateOnly? TargetDate { get; private set; }
+    public DateTimeOffset? FinishedAtUtc { get; private set; }
+    public void RecordCompletion(bool wasFinished, string finishedColumn, DateTimeOffset now)
+    {
+        var finished = Status == finishedColumn;
+        if (finished != wasFinished) FinishedAtUtc = finished ? now : null;
+    }
     public void SetDates(DateOnly? startDate, DateOnly? targetDate, DateTimeOffset now)
     {
         TodoSchedule.Validate(startDate, targetDate);

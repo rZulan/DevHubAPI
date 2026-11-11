@@ -154,6 +154,15 @@ EOF
         proxy_set_header X-Forwarded-For $remote_addr;
     }
 NGINX
+        else
+            cat <<'NGINX'
+    location ~* \.md$ {
+        types { }
+        default_type text/plain;
+        charset utf-8;
+        try_files $uri =404;
+    }
+NGINX
         fi
         echo '}'
     } > "$stage/$site-nginx.next"
