@@ -10,6 +10,23 @@ $ErrorActionPreference = "Stop"
 $repositoryPath = $PSScriptRoot
 $apiPath = Join-Path $repositoryPath "src\DevHub.Api"
 $projectPath = Join-Path $apiPath "DevHub.Api.csproj"
+$pathDotnet = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+$userDotnet = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
+$dotnetExecutable = $null
+
+foreach ($candidate in @($pathDotnet.Source, $userDotnet) | Select-Object -Unique) {
+    if (-not $candidate -or -not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+    $sdkVersion = & $candidate --version | Select-Object -Last 1
+    if ($LASTEXITCODE -eq 0 -and $sdkVersion -match '^(\d+)\.' -and [int]$Matches[1] -ge 11) {
+        $dotnetExecutable = $candidate
+        break
+    }
+}
+
+if (-not $dotnetExecutable) {
+    throw "Install the .NET 11 SDK to run the DevHub API."
+}
+
 $developmentPorts = 5288, 7116
 $listenerProcessIds = Get-NetTCPConnection `
     -State Listen `
@@ -45,5 +62,5 @@ if ($NoBuild)
     $runArguments += "--no-build"
 }
 
-& dotnet @runArguments
+& $dotnetExecutable @runArguments
 exit $LASTEXITCODE

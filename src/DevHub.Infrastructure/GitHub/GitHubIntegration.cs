@@ -82,7 +82,7 @@ public sealed class GitHubIntegration(ApplicationDbContext db, HttpClient http, 
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () => {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var connection = await db.Set<GitHubConnection>().FromSqlInterpolated(
+            var connection = await db.Set<GitHubConnection>().FromSql(
                 $"SELECT * FROM [GitHubConnections] WITH (UPDLOCK, HOLDLOCK) WHERE [UserId] = {userId}").SingleOrDefaultAsync(ct);
             if (connection is null) throw new GitHubIntegrationException("Connect your GitHub account to browse repositories.", 409);
             await db.Entry(connection).ReloadAsync(ct);

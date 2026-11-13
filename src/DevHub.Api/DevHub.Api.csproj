@@ -7,20 +7,20 @@
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
-        <RuntimeFrameworkVersion>10.0.14</RuntimeFrameworkVersion>
+        <RuntimeFrameworkVersion>11.0.0</RuntimeFrameworkVersion>
     </PropertyGroup>
     <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
-        <FrameworkReference Update="Microsoft.AspNetCore.App" RuntimeFrameworkVersion="10.0.14" />
+        <FrameworkReference Update="Microsoft.AspNetCore.App" RuntimeFrameworkVersion="11.0.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="11.0.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="11.0.0">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
-        <PackageReference Include="Scalar.AspNetCore" Version="2.16.16" />
+        <PackageReference Include="Microsoft.OpenApi" Version="3.11.0" />
+        <PackageReference Include="Scalar.AspNetCore" Version="2.20.0" />
     </ItemGroup>
 
     <ItemGroup>

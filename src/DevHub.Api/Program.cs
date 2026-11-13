@@ -66,6 +66,7 @@ builder.Services.AddHostedService<WorkshopPresenceCleanup>();
 
 builder.Services.AddOpenApi(options =>
 {
+    options.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_2;
     options.AddDocumentTransformer<ApiDocumentMetadataTransformer>();
     options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
 });
@@ -122,7 +123,15 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<WorkshopHub>("/hubs/workshop", options => options.CloseOnAuthenticationExpiration = true);
-app.MapHub<ChatHub>("/hubs/chat", options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<WorkshopHub>("/hubs/workshop", options =>
+{
+    options.EnableAuthenticationRefresh = true;
+    options.CloseOnAuthenticationExpiration = true;
+});
+app.MapHub<ChatHub>("/hubs/chat", options =>
+{
+    options.EnableAuthenticationRefresh = true;
+    options.CloseOnAuthenticationExpiration = true;
+});
 
 app.Run();

@@ -54,7 +54,9 @@ The client is built with same-origin `/api` URLs and social login enabled. Use h
 
 Build failures stop before uploading. Remote deployment is serialized with a lock, stages files before stopping the service, and retains the preceding API/client directories for recovery. Startup and HTTPS failures trigger application-file rollback. SSH interruption may require checking the service manually. Release folders accumulate under `/opt/devhub/releases`; inspect disk usage and retain only needed old releases as part of maintenance.
 
-Requirements: .NET 10 SDK, Node/npm, Windows OpenSSH, and tar on PATH. Production already has the required runtime bundled into the published API, Nginx, and certificate renewal configured.
+Requirements: .NET 11 SDK, Node/npm, Windows OpenSSH, and tar on PATH. The self-contained API includes the runtime. The Linux host must support the .NET 11 x64 CPU baseline.
+
+If the .NET 11 SDK is installed in your user profile, put its installation folder first on PATH before starting Rider or running the script. Check the selected SDK with `dotnet --version`.
 
 ## Status
 

@@ -19,7 +19,7 @@ internal sealed class WorkshopUsage(DbContextOptions<ApplicationDbContext> optio
         {
             await using var db = new ApplicationDbContext(options);
             await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-            var bucket = await db.Set<WorkshopUsageBucket>().FromSqlInterpolated($"SELECT * FROM [WorkshopUsageBuckets] WITH (UPDLOCK, HOLDLOCK) WHERE [Key] = {key} AND [WindowStartUtc] = {start}").SingleOrDefaultAsync(ct);
+            var bucket = await db.Set<WorkshopUsageBucket>().FromSql($"SELECT * FROM [WorkshopUsageBuckets] WITH (UPDLOCK, HOLDLOCK) WHERE [Key] = {key} AND [WindowStartUtc] = {start}").SingleOrDefaultAsync(ct);
             var granted = Math.Min(requested, Math.Max(0, limit - (bucket?.Used ?? 0)));
             if (granted == 0) return 0;
             if (bucket is null) {bucket = new() {Key = key, WindowStartUtc = start, ExpiresAtUtc = start + window + TimeSpan.FromDays(1)}; db.Add(bucket);}
@@ -45,7 +45,7 @@ internal sealed class WorkshopUsage(DbContextOptions<ApplicationDbContext> optio
                     throw new ArgumentOutOfRangeException(nameof(charges));
                 var start = DateTimeOffset.FromUnixTimeSeconds(now.ToUnixTimeSeconds() / (long)charge.Window.TotalSeconds * (long)charge.Window.TotalSeconds);
                 // UPDLOCK avoids lock-conversion deadlocks on the shared counter row/range.
-                var bucket = await db.Set<WorkshopUsageBucket>().FromSqlInterpolated($"SELECT * FROM [WorkshopUsageBuckets] WITH (UPDLOCK, HOLDLOCK) WHERE [Key] = {charge.Key} AND [WindowStartUtc] = {start}").SingleOrDefaultAsync(ct);
+                var bucket = await db.Set<WorkshopUsageBucket>().FromSql($"SELECT * FROM [WorkshopUsageBuckets] WITH (UPDLOCK, HOLDLOCK) WHERE [Key] = {charge.Key} AND [WindowStartUtc] = {start}").SingleOrDefaultAsync(ct);
                 if ((long)(bucket?.Used ?? 0) + charge.Units > charge.Limit)
                     return new Error("Workshop.RateLimit", "This workshop action has reached its limit. Your draft is preserved; try again after the cooldown.", ErrorType.Throttled,
                         RetryAfterSeconds: Math.Max(1, (int)Math.Ceiling((start + charge.Window - now).TotalSeconds)));

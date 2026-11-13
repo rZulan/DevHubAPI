@@ -43,8 +43,8 @@ await using (var seed = provider.CreateAsyncScope())
         Check(!organization.TransferOwnership(administratorId, targetId, now) && !organization.TransferOwnership(ownerId, ownerId, now) && !organization.TransferOwnership(ownerId, Guid.NewGuid(), now), "domain rejects nonowner, self and nonmember transfers");
         Check(!organization.RemoveMember(ownerId, now), "the sole owner cannot leave or be removed");
         await db.SaveChangesAsync();
-        await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE OrganizationMembers SET IsOwner = 1 WHERE OrganizationId = {organizationId} AND UserId = {targetId}");
-        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO OrganizationMemberRoles (OrganizationId, UserId, RoleId, AssignedAtUtc) VALUES ({organizationId}, {targetId}, {ownerRole.Id}, {now})");
+        await db.Database.ExecuteSqlAsync($"UPDATE OrganizationMembers SET IsOwner = 1 WHERE OrganizationId = {organizationId} AND UserId = {targetId}");
+        await db.Database.ExecuteSqlAsync($"INSERT INTO OrganizationMemberRoles (OrganizationId, UserId, RoleId, AssignedAtUtc) VALUES ({organizationId}, {targetId}, {ownerRole.Id}, {now})");
         db.ChangeTracker.Clear();
         var malformed = (await seed.ServiceProvider.GetRequiredService<IOrganizationRepository>().GetByIdAsync(organizationId))!;
         Check(!malformed.IsOwner(targetId) && !malformed.HasPermission(targetId, OrganizationPermissions.Administrator), "stale owner flags and role assignments do not grant ownership authority");
@@ -55,7 +55,7 @@ await using (var seed = provider.CreateAsyncScope())
         Check((await db.Organizations.AsNoTracking().SingleAsync()).OwnerUserId == ownerId, "migration preserves the recorded owner");
         try
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE OrganizationMembers SET IsOwner = 1 WHERE OrganizationId = {organizationId} AND UserId = {targetId}");
+            await db.Database.ExecuteSqlAsync($"UPDATE OrganizationMembers SET IsOwner = 1 WHERE OrganizationId = {organizationId} AND UserId = {targetId}");
             throw new Exception("Duplicate owner accepted by database");
         }
         catch (SqlException error) when (error.Number is 2601 or 2627) {Console.WriteLine("PASS ownership: database prevents a second owner");}

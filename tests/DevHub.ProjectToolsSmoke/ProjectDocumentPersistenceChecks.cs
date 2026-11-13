@@ -92,7 +92,7 @@ internal static class ProjectDocumentPersistenceChecks
 
         async Task Rejected(FormattableString sql, string label, params int[] errorNumbers)
         {
-            try { await db.Database.ExecuteSqlInterpolatedAsync(sql); }
+            try { await db.Database.ExecuteSqlAsync(sql); }
             catch (SqlException exception) when (errorNumbers.Contains(exception.Number)) { Check(true, label); return; }
             throw new Exception(label);
         }

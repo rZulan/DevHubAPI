@@ -28,7 +28,7 @@ internal sealed class ProjectDocumentStore(ApplicationDbContext db)
         // A new project's first save creates its document. Range locks on the unique
         // project/tool index serialize competing first saves without overwriting either.
         var id = Guid.NewGuid();
-        count = await db.Database.ExecuteSqlInterpolatedAsync($"""
+        count = await db.Database.ExecuteSqlAsync($"""
             INSERT INTO [ProjectDocuments] ([Id], [ProjectId], [ToolType], [ContentJson], [Revision], [UpdatedByUserId], [UpdatedAtUtc])
             SELECT {id}, [project].[Id], {tool}, {json}, 1, {userId}, {now}
             FROM [Projects] AS [project]

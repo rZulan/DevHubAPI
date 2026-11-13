@@ -24,7 +24,11 @@ public static class CalendarDocumentValidation
             if (!item.TryGetProperty("allDay", out var allDay) || allDay.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
             var from = Text(item, "startTime"); var to = Text(item, "endTime");
             if (allDay.GetBoolean()) { if (from != "" || to != "") return false; }
-            else if (!TimeOnly.TryParseExact(from, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromTime) || !TimeOnly.TryParseExact(to, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toTime) || start == end && toTime <= fromTime) return false;
+            // Calendar dates are explicit. 24:00 must not wrap to midnight on the same date.
+            else if (from == "24:00" || to == "24:00" ||
+                !TimeOnly.TryParseExact(from, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fromTime) ||
+                !TimeOnly.TryParseExact(to, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var toTime) ||
+                start == end && toTime <= fromTime) return false;
         }
         return true;
     }

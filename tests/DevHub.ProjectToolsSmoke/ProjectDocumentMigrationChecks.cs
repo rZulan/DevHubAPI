@@ -14,7 +14,7 @@ internal static class ProjectDocumentMigrationChecks
         var erd = JsonSerializer.Serialize(new { tables = Array.Empty<object>(), relationships = Array.Empty<object>(), marker });
         const string roadmap = "{ \"model\": \"waterfall\", \"currentPhase\": 0, \"completed\": false, \"notes\": {} }";
         const string notes = "{\"notes\":[]}";
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
+        await db.Database.ExecuteSqlAsync($"""
             UPDATE [Projects] SET [IdeasJson] = N'[]', [IdeasRevision] = 3,
                 [ErdJson] = {erd}, [ErdRevision] = 7,
                 [DesignJson] = NULL, [DesignRevision] = 4,
