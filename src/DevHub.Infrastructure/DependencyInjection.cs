@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.IdentityModel.JsonWebTokens;
 using DevHub.Application.Abstractions.Authentication;
@@ -23,6 +24,8 @@ using DevHub.Infrastructure.Persistence;
 using DevHub.Infrastructure.Persistence.Repositories;
 using DevHub.Application.Chats;
 using DevHub.Infrastructure.Chats;
+using DevHub.Application.Connections;
+using DevHub.Infrastructure.Connections;
 
 namespace DevHub.Infrastructure;
 
@@ -70,6 +73,15 @@ public static class DependencyInjection
         services.AddScoped<DevHub.Application.ProjectTools.IProjectToolsService, DevHub.Infrastructure.ProjectTools.ProjectToolsService>();
         services.AddScoped<DevHub.Application.Appearance.IMemberAppearanceService, DevHub.Infrastructure.Appearance.MemberAppearanceService>();
         services.AddScoped<DevHub.Application.Todos.ITodoService, DevHub.Infrastructure.Todos.TodoService>();
+        services.AddScoped<ConnectionAuthorization>();
+        services.AddScoped<ConnectionExecutionContext>();
+        services.AddScoped<IProjectConnections, ProjectConnections>();
+        services.AddScoped<IConnectionEvents, ConnectionEvents>();
+        services.AddScoped<IConnectionTools, ConnectionTools>();
+        services.AddScoped<ConnectionCalendarSchedule>();
+        services.AddScoped<IConnectionCalendarSchedule>(service => service.GetRequiredService<ConnectionCalendarSchedule>());
+        services.TryAddScoped<IConnectionChangeNotifier, NullConnectionChangeNotifier>();
+        services.AddHostedService<ConnectionWorker>();
         services.AddScoped<IUnitOfWork>(serviceProvider =>
             serviceProvider.GetRequiredService<ApplicationDbContext>());
 
@@ -298,7 +310,7 @@ public static class DependencyInjection
             "Bearer",
             context.AccessToken);
         userRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        userRequest.Headers.UserAgent.ParseAdd("Zevont");
+        userRequest.Headers.UserAgent.ParseAdd("Zhimera");
 
         using var userResponse = await context.Backchannel.SendAsync(
             userRequest,
@@ -384,7 +396,7 @@ public static class DependencyInjection
             "Bearer",
             context.AccessToken);
         emailRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        emailRequest.Headers.UserAgent.ParseAdd("Zevont");
+        emailRequest.Headers.UserAgent.ParseAdd("Zhimera");
 
         using var emailResponse = await context.Backchannel.SendAsync(
             emailRequest,

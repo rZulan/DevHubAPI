@@ -10,6 +10,7 @@ using DevHub.Api.Security;
 using DevHub.Application;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Authentication.ExternalAuthentication;
+using DevHub.Application.Users;
 using DevHub.Domain.Authentication;
 using DevHub.Domain.Users;
 using DevHub.Infrastructure;
@@ -135,6 +136,23 @@ try{
     var alice=User.Create("alice@example.invalid","alice","Alice","Audit","test-hash",DateTimeOffset.UtcNow);
     var bob=User.Create("bob@example.invalid","bob","Bob","Audit","test-hash",DateTimeOffset.UtcNow);
     store.Add(alice);store.Add(bob);var aliceSession=Session(alice);var bobSession=Session(bob);
+    using (var anonymous = await Send("/api/users/discovery"))
+        Check("Discovery requires sign-in", anonymous.StatusCode == HttpStatusCode.Unauthorized);
+    using (var discovery = await Send("/api/users/discovery", aliceSession))
+    {
+        var page = await discovery.Content.ReadFromJsonAsync<DiscoveryProfilePage>();
+        Check("Discovery excludes the viewer and includes another real profile",
+            discovery.IsSuccessStatusCode && page is not null
+            && page.Items.Any(profile => profile.Id == bob.Id) && page.Items.All(profile => profile.Id != alice.Id));
+    }
+    using (var response = await Send("/api/users/profiles/BOB", aliceSession))
+    {
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var profile = document.RootElement;
+        Check("Discovery profile lookup is case insensitive and exposes only profile fields",
+            response.IsSuccessStatusCode && profile.GetProperty("id").GetGuid() == bob.Id
+            && profile.GetProperty("username").GetString() == "bob" && profile.EnumerateObject().Count() == 5);
+    }
     var linking=await Start("github",aliceSession,true);
     using(var callbackResponse=await Callback(linking)){
         var before=store.Accounts.Count;
@@ -200,6 +218,16 @@ sealed class MemoryStore:IUserRepository,IExternalAccountRepository,IRefreshToke
     public Task<User?> GetByIdAsync(Guid id,CancellationToken cancellationToken=default)=>Task.FromResult(Users.SingleOrDefault(u=>u.Id==id));
     public Task<User?> GetByIdForUpdateAsync(Guid id,CancellationToken cancellationToken=default)=>GetByIdAsync(id,cancellationToken);
     public Task<User?> GetByEmailAsync(string email,CancellationToken cancellationToken=default)=>Task.FromResult(Users.SingleOrDefault(u=>u.Email.Equals(email,StringComparison.OrdinalIgnoreCase)));
+    public Task<IReadOnlyList<DiscoveryProfile>> ListDiscoveryProfilesAsync(Guid viewerId, string? after, int limit, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<DiscoveryProfile>>(Users
+            .Where(user => user.Id != viewerId && StringComparer.OrdinalIgnoreCase.Compare(user.Username, after) > 0)
+            .OrderBy(user => user.Username, StringComparer.OrdinalIgnoreCase).Take(limit).Select(ToDiscoveryProfile).ToArray());
+    public Task<DiscoveryProfile?> GetDiscoveryProfileAsync(string username, CancellationToken cancellationToken) =>
+        Task.FromResult(Users.SingleOrDefault(user => user.Username.Equals(username, StringComparison.OrdinalIgnoreCase)) is { } user
+            ? ToDiscoveryProfile(user)
+            : null);
+    private static DiscoveryProfile ToDiscoveryProfile(User user) =>
+        new(user.Id, user.Username, user.FirstName, user.LastName, user.AvatarUrl);
     public Task<bool> UsernameExistsAsync(string username,Guid? excludingUserId=null,CancellationToken cancellationToken=default)=>Task.FromResult(Users.Any(u=>u.Id!=excludingUserId&&u.Username.Equals(username,StringComparison.OrdinalIgnoreCase)));
     public void Add(User user){Users.Add(user);foreach(var account in user.ExternalAccounts)Accounts.Add(account);}
     public Task<ExternalAccount?> GetByProviderIdentityAsync(string provider,string providerUserId,CancellationToken cancellationToken=default)=>Task.FromResult(Accounts.SingleOrDefault(a=>a.Provider==provider&&a.ProviderUserId==providerUserId));

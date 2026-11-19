@@ -5,9 +5,11 @@ internal static class NotesChecks
 {
     public static void Run()
     {
-        var note = new {id = "note-1", title = "Meeting notes", body = "Keep the next release focused.", color = "#cce5ce", updatedAt = "2026-10-20T00:00:00.000Z"};
+        var note = new {id = "note-1", title = "Meeting notes", body = "Keep the next release focused.", color = (string?)"#cce5ce", updatedAt = "2026-10-20T00:00:00.000Z"};
         bool Valid(object[] notes) => ToolDocumentValidation.Valid("notes", JsonSerializer.SerializeToElement(new {notes}));
         Check(Valid([]) && Valid([note]), "Empty and populated notes documents accepted");
+        Check(Valid([note with {color = null}]), "Notes with no color accepted");
+        Check(!Valid([new {note.id, note.title, note.body, note.updatedAt}]), "Missing note colors rejected");
         Check(!Valid([note, note]), "Duplicate note identities rejected");
         Check(!Valid([note with {title = " "}]), "Blank note titles rejected");
         Check(!Valid([note with {body = new string('a', 10001)}]), "Oversized note bodies rejected");

@@ -48,9 +48,9 @@ if (-not $BuildOnly) {
     ) -join '; '
     Invoke-Checked ssh.exe (@('-n','-T') + $sshOptions + @($server, $preflight))
     if ($Configure) {
-        $enteredId = Read-Host 'Approved Zevont account ID (GUID from https://dev-hub.site/api/users/me)'
+        $enteredId = Read-Host 'Approved Zhimera account ID (GUID from https://dev-hub.site/api/users/me)'
         $parsedId = [guid]::Empty
-        if (-not [guid]::TryParse($enteredId, [ref]$parsedId) -or $parsedId -eq [guid]::Empty) { throw 'Enter a valid Zevont account ID.' }
+        if (-not [guid]::TryParse($enteredId, [ref]$parsedId) -or $parsedId -eq [guid]::Empty) { throw 'Enter a valid Zhimera account ID.' }
         $adminId = $parsedId.ToString('D')
     }
 }

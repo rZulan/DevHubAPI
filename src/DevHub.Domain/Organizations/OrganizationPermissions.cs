@@ -12,6 +12,7 @@ public static class OrganizationPermissions
     public const string ViewAllProjects = "View all projects";
     public const string ManageProjects = "Manage projects";
     public const string ManageTasks = "Manage tasks";
+    public const string ManageConnections = "Manage connections";
     public const string EditIdeation = "Edit ideation";
     public const string EditErd = "Edit ERD";
     public const string EditUiDesigns = "Edit UI designs";
@@ -32,6 +33,7 @@ public static class OrganizationPermissions
         {
             EditErd or EditUiDesigns or EditStateMachines or EditUmlDiagrams or ManageNotes => granted.Contains(EditIdeation),
             ManageRoadmap => granted.Contains(ManageProjects),
+            ManageConnections => granted.Contains(ManageProjects),
             ManageDashboard => granted.Contains(ManageOrganization),
             CreateInvites => granted.Contains(ManageInvites),
             _ => false
@@ -50,6 +52,7 @@ public static class OrganizationPermissions
         ViewAllProjects,
         ManageProjects,
         ManageTasks,
+        ManageConnections,
         EditIdeation,
         EditErd,
         EditUiDesigns,

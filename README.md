@@ -1,4 +1,4 @@
-# DevHub
+# Zhimera API
 
 ASP.NET Core API organized using Clean Architecture:
 
@@ -59,7 +59,7 @@ dotnet ef database update `
   --startup-project src/DevHub.Api
 ```
 
-Run or restart the API. This launcher stops an existing DevHub API process from this
+Run or restart the API. This launcher stops an existing Zhimera API process from this
 repository before starting the new instance. It refuses to stop unrelated applications
 that happen to use the same ports:
 
@@ -122,8 +122,8 @@ columns. Wiki validation, SQL round trips, conflicts, and permission isolation r
 ## Bug reports
 
 The `AddProjectBugReports` migration creates project reports, category definitions,
-public-link settings, and private attachment storage in SQL. Use the **Bug Reports**
-project resource to enable public reporting and copy `/report-bug/{token}` on the
+public-link settings, and private attachment storage in SQL. Use the **Issue**
+project resource to enable public reporting and copy `/report-issue/{token}` on the
 frontend's origin. Links start disabled; disabling blocks both GET and POST, and
 replacing a link invalidates its previous token without removing reports.
 
@@ -208,7 +208,7 @@ installation. The initial integration does not require webhooks or code access.
 The API exposes `/api/integrations/github/status`, `POST authorize`,
 `GET installations`, `GET installations/{id}/repositories?page=1`, and
 `DELETE connection`. The anonymous callback verifies a protected, expiring
-correlation cookie, the initiating DevHub login session, and OAuth state.
+correlation cookie, the initiating Zhimera login session, and OAuth state.
 Regular authorization uses PKCE. Tokens are protected using ASP.NET Core Data
 Protection and refreshed on the server. Preserve the Data Protection key ring
 across restarts/deployments; losing it requires users to reconnect. Production

@@ -1,6 +1,7 @@
 using DevHub.Api.OpenApi;
 using DevHub.Api.Errors;
 using DevHub.Application;
+using DevHub.Application.Connections;
 using DevHub.Infrastructure;
 using DevHub.Api.Realtime;
 using Scalar.AspNetCore;
@@ -88,6 +89,7 @@ builder.Services.AddCors(options =>
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IConnectionChangeNotifier, ConnectionChangeNotifier>();
 
 var app = builder.Build();
 

@@ -3,6 +3,7 @@ namespace DevHub.Domain.Notifications;
 public sealed class UserNotification
 {
     public const string TaskAssigned = "task-assigned";
+    public const string ConnectionTriggered = "connection-triggered";
     private UserNotification() { }
     public UserNotification(Guid organizationId, Guid userId, Guid actorUserId, string kind, string title,
         Guid contextId, Guid targetId, DateTimeOffset now, Guid? projectId = null)

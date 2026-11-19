@@ -34,7 +34,9 @@ internal sealed class NotificationService(ApplicationDbContext db, IOrganization
         if (unreadOnly) query = query.Where(n => n.ReadAtUtc == null);
         if (before.HasValue) query = query.Where(n => n.Id < before.Value);
         var items = await query.OrderByDescending(n => n.Id).Take(26).Select(n => new UserNotificationResponse(
-            n.Id, n.Kind, n.Title, db.Users.Where(u => u.Id == n.ActorUserId).Select(u => u.FirstName + " " + u.LastName).FirstOrDefault() ?? (n.ActorUserId == Guid.Empty ? "Public reporter" : "Former member"),
+            n.Id, n.Kind, n.Title, n.Kind == UserNotification.ConnectionTriggered ? "Automation" :
+                db.Users.Where(u => u.Id == n.ActorUserId).Select(u => u.FirstName + " " + u.LastName).FirstOrDefault()
+                    ?? (n.ActorUserId == Guid.Empty ? "Public reporter" : "Former member"),
             n.ProjectId, db.Projects.Where(p => p.Id == n.ProjectId).Select(p => p.Name).FirstOrDefault(), n.ContextId, n.TargetId, n.CreatedAtUtc, n.ReadAtUtc)).ToListAsync(ct);
         return Result<NotificationPageResponse>.Success(new(items.Take(25).ToArray(), unreadCount, items.Count > 25 ? items[24].Id : null, latestId));
     }

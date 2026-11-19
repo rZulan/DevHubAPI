@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.BugReports;
 using DevHub.Application.Common;
+using DevHub.Application.Connections;
 using DevHub.Application.Ideas;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Projects;
@@ -14,8 +15,21 @@ using DevHub.Application.Notifications;
 namespace DevHub.Infrastructure.BugReports;
 
 internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService access, IOrganizationRepository organizations, IWorkshopActivity activity,
-    DevHub.Infrastructure.Workshops.WorkshopStorage storage) : IBugReportsService
+    DevHub.Infrastructure.Workshops.WorkshopStorage storage, IConnectionEvents events) : IBugReportsService
 {
+    private static readonly ConnectionNodeRef BugsTool = new("bug-reports");
+
+    private Task QueueReport(Guid organizationId, Guid actor, BugReport report, string kind, CancellationToken ct, string? previousStatus = null)
+    {
+        var fields = new Dictionary<string, string>
+        {
+            ["status"] = report.Status, ["priority"] = report.Priority, ["source"] = report.Source,
+            ["categoryId"] = report.CategoryId?.ToString() ?? "", ["reference"] = report.Reference
+        };
+        if (previousStatus is not null) fields["previousStatus"] = previousStatus;
+        return events.Enqueue(organizationId, report.ProjectId, actor, new(new("bug-report", report.Id.ToString()), kind, fields, [BugsTool]), ct);
+    }
+
     private static readonly Error Missing = new("Bugs.NotFound", "The report or submission link is unavailable.", ErrorType.NotFound);
     private static readonly Error Conflict = new("Bugs.Conflict", "This item changed in another session. Reload and try again.", ErrorType.Conflict);
     private static Error Invalid(string message) => new("Bugs.Invalid", message, ErrorType.Validation);
@@ -64,9 +78,26 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         if (report is null) return Result<BugDetail>.Failure(Missing);
         if (report.Revision != request.Revision) return Result<BugDetail>.Failure(Conflict);
         if (request.CategoryId is { } category && !await db.BugCategories.AnyAsync(c => c.ProjectId == scope.ProjectId && c.Id == category && (!c.Archived || report.CategoryId == category), ct)) return Result<BugDetail>.Failure(Invalid("Choose an active category from this project."));
-        var changed = report.Status != request.Status || report.Priority != request.Priority || report.CategoryId != request.CategoryId || report.InternalNotes != request.InternalNotes.Trim();
+        var previousStatus = report.Status;
+        var previousPriority = report.Priority;
+        var previousCategory = report.CategoryId;
+        var notesChanged = report.InternalNotes != request.InternalNotes.Trim();
+        var changed = previousStatus != request.Status || previousPriority != request.Priority || previousCategory != request.CategoryId || notesChanged;
         report.Triage(request.Status, request.Priority, request.CategoryId, request.InternalNotes, DateTimeOffset.UtcNow);
         if (changed) await activity.Queue(new(scope.OrganizationId, scope.UserId, "bug-updated", report.Title, report.Id, report.Id, scope.ProjectId), ct);
+        if (previousStatus != report.Status) await QueueReport(scope.OrganizationId, scope.UserId, report, "report-status-changed", ct, previousStatus);
+        if (previousPriority != report.Priority) await QueueReport(scope.OrganizationId, scope.UserId, report, "report-priority-changed", ct);
+        if (previousCategory != report.CategoryId)
+        {
+            await QueueReport(scope.OrganizationId, scope.UserId, report, "report-category-changed", ct);
+            if (previousCategory is { } oldCategory)
+                await events.Enqueue(scope.OrganizationId, scope.ProjectId, scope.UserId, new(new("bug-category", oldCategory.ToString()),
+                    "report-uncategorized", new Dictionary<string, string> { ["reference"] = report.Reference }, [BugsTool]), ct);
+            if (report.CategoryId is { } newCategory)
+                await events.Enqueue(scope.OrganizationId, scope.ProjectId, scope.UserId, new(new("bug-category", newCategory.ToString()),
+                    "report-categorized", new Dictionary<string, string> { ["reference"] = report.Reference }, [BugsTool]), ct);
+        }
+        if (notesChanged) await QueueReport(scope.OrganizationId, scope.UserId, report, "report-notes-changed", ct);
         try {await db.SaveChangesAsync(ct);} catch (PersistenceConcurrencyException) {return Result<BugDetail>.Failure(Conflict);}
         return await Get(scope, reportId, ct);
     }
@@ -104,10 +135,24 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
         if (id is null && await db.BugCategories.CountAsync(c => c.ProjectId == scope.ProjectId, ct) >= 100) return Result<BugCategoryResponse>.Failure(Invalid("This project has reached its 100-category limit. Rename or restore an existing category."));
         var normalized = name.Trim().ToUpperInvariant();
         if (await db.BugCategories.AnyAsync(c => c.ProjectId == scope.ProjectId && c.Id != id && c.NormalizedName == normalized, ct)) return Result<BugCategoryResponse>.Failure(Invalid("A category with this name already exists, including archived categories."));
-        var changed = category is null || category.Name != name.Trim() || category.Archived != archived;
+        var previousName = category?.Name;
+        var previousArchived = category?.Archived;
+        var changed = category is null || previousName != name.Trim() || previousArchived != archived;
         if (category is null) {category = BugCategory.Create(scope.ProjectId, name); db.BugCategories.Add(category);}
         category.Update(name, archived);
         if (changed) await activity.Queue(new(scope.OrganizationId, scope.UserId, "bug-settings", "Bug report categories", scope.ProjectId, scope.ProjectId, scope.ProjectId), ct);
+        if (changed)
+        {
+            var source = new ConnectionNodeRef("bug-category", category.Id.ToString());
+            var fields = new Dictionary<string, string> { ["name"] = category.Name, ["archived"] = category.Archived ? "true" : "false" };
+            if (previousName is null) await events.Enqueue(scope.OrganizationId, scope.ProjectId, scope.UserId, new(source, "category-created", fields, [BugsTool]), ct);
+            else
+            {
+                if (previousName != category.Name) await events.Enqueue(scope.OrganizationId, scope.ProjectId, scope.UserId, new(source, "category-renamed", fields, [BugsTool]), ct);
+                if (previousArchived != category.Archived) await events.Enqueue(scope.OrganizationId, scope.ProjectId, scope.UserId,
+                    new(source, category.Archived ? "category-archived" : "category-restored", fields, [BugsTool]), ct);
+            }
+        }
         try {await db.SaveChangesAsync(ct);} catch (UniqueConstraintViolationException) {return Result<BugCategoryResponse>.Failure(Invalid("A category with this name already exists."));}
         return Result<BugCategoryResponse>.Success(new(category.Id, category.Name, category.Archived));
     }
@@ -167,6 +212,10 @@ internal sealed class BugReportsService(ApplicationDbContext db, IIdeasService a
             foreach (var file in files) report.Attachments.Add(BugReportAttachment.Create(report.Id, file.Name, BugFileValidation.ContentType(file.Name, file.Content)!, file.Content));
             db.BugReports.Add(report);
             await activity.Queue(new(organizationId, scope?.UserId ?? Guid.Empty, "bug-created", report.Title, report.Id, report.Id, projectId), ct);
+            await QueueReport(organizationId, scope?.UserId ?? Guid.Empty, report, "report-submitted", ct);
+            if (report.CategoryId is { } submittedCategory)
+                await events.Enqueue(organizationId, projectId, scope?.UserId ?? Guid.Empty, new(new("bug-category", submittedCategory.ToString()),
+                    "report-categorized", new Dictionary<string, string> { ["reference"] = report.Reference }, [BugsTool]), ct);
             await db.SaveChangesAsync(ct); await tx.CommitAsync(ct);
             return Result<BugReceipt>.Success(new(report.Reference));
         });

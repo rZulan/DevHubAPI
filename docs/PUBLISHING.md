@@ -77,7 +77,7 @@ From PowerShell in the API directory, run the first deployment with your existin
 .\tools\publish-subsites.ps1 -Configure
 ```
 
-Sign in to Zevont and open [your account profile endpoint](https://dev-hub.site/api/users/me) to find the account GUID. Enter the GUID when PowerShell prompts for it. Use a Zevont account with an email and password to sign in to the admin site. The configured account can view platform totals and the 12 newest users, organizations, and bug reports. The first deployment publishes the API too, which briefly restarts that service. Admin access uses server configuration and requires no database migration.
+Sign in to Zhimera and open [your account profile endpoint](https://dev-hub.site/api/users/me) to find the account GUID. Enter the GUID when PowerShell prompts for it. Use a Zhimera account with an email and password to sign in to the admin site. The configured account can view platform totals and the 12 newest users, organizations, and bug reports. The first deployment publishes the API too, which briefly restarts that service. Admin access uses server configuration and requires no database migration.
 
 Use **Publish Admin** or **Publish Docs** in WebStorm for later frontend updates, or run:
 
@@ -89,5 +89,5 @@ Use **Publish Admin** or **Publish Docs** in WebStorm for later frontend updates
 
 For a local admin session, set `PlatformAdmin__UserIds__0` to an approved local account GUID in the PowerShell session that starts the API. Run `npm run dev:admin` from the client and open `http://localhost:5174`. The Vite server proxies API requests to the local HTTPS API.
 
-Clone [ZevontDocs](https://github.com/rZulan/ZevontDocs) into a `docs` folder alongside `api` and `client`. **Publish Docs** builds that checkout when it is present. Workspaces without a standalone checkout use the guides in `client/sites/docs`.
+Clone the [standalone documentation repository](https://github.com/rZulan/ZevontDocs) into a `docs` folder alongside `api` and `client`. **Publish Docs** builds that checkout when it is present. Workspaces without a standalone checkout use the guides in `client/sites/docs`.
 

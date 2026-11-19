@@ -32,6 +32,7 @@ if (isolatedDatabase is not null)
 {
     await isolatedDatabase.Seed(db, ProjectDocumentMigrationChecks.LegacyMigration, ProjectDocumentMigrationChecks.Run);
     await ProjectDocumentPersistenceChecks.Run(provider);
+    await ConnectionChecks.Run(provider);
 }
 await CollaborationChecks.Run();
 JsonElement Json(string json) => JsonSerializer.Deserialize<JsonElement>(json);

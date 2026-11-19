@@ -1,5 +1,6 @@
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
+using DevHub.Application.Connections;
 using DevHub.Application.Todos;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Todos;
@@ -11,8 +12,50 @@ using Microsoft.EntityFrameworkCore;
 namespace DevHub.Infrastructure.Todos;
 
 internal sealed class TodoService(ApplicationDbContext db, IOrganizationRepository organizations, TimeProvider clock, IWorkshopActivity activity,
-    DevHub.Application.Workshops.IWorkshopUsage usage, DevHub.Application.Workshops.WorkshopLimits limits) : ITodoService
+    DevHub.Application.Workshops.IWorkshopUsage usage, DevHub.Application.Workshops.WorkshopLimits limits, IConnectionEvents events) : ITodoService
 {
+    private static readonly ConnectionNodeRef TodoTool = new("todo");
+    private static ConnectionNodeRef BoardNode(Guid id) => new("todo-board", id.ToString());
+    private static ConnectionNodeRef TaskNode(Guid boardId, Guid taskId) => new("todo-task", taskId.ToString(), boardId.ToString());
+
+    private Task QueueBoard(Guid orgId, Guid actor, Todo todo, string kind, CancellationToken ct) => events.Enqueue(orgId,
+        todo.ProjectId, actor, new(BoardNode(todo.Id), kind, new Dictionary<string, string> { ["name"] = todo.Name }, [TodoTool]), ct);
+
+    private Task QueueBoardCompletion(Guid orgId, Guid actor, Todo todo, bool wasFinished, CancellationToken ct) =>
+        wasFinished == todo.IsFinished() ? Task.CompletedTask : QueueBoard(orgId, actor, todo, wasFinished ? "board-reopened" : "board-completed", ct);
+
+    private Task QueueColumn(Guid orgId, Guid actor, Todo todo, TodoColumn column, string kind, CancellationToken ct) => events.Enqueue(orgId,
+        todo.ProjectId, actor, new(new("todo-column", column.Id, todo.Id.ToString()), kind,
+            new Dictionary<string, string> { ["name"] = column.Name }, [BoardNode(todo.Id), TodoTool]), ct);
+
+    private Task QueueTask(Guid orgId, Guid actor, Todo todo, TodoTask task, string kind, CancellationToken ct,
+        string? previous = null, string? person = null)
+    {
+        var fields = new Dictionary<string, string> { ["title"] = task.Title, ["status"] = task.Status };
+        if (previous is not null) fields["previousStatus"] = previous;
+        if (person is not null) fields["userId"] = person;
+        return events.Enqueue(orgId, todo.ProjectId, actor, new(TaskNode(todo.Id, task.Id), kind, fields, [BoardNode(todo.Id), TodoTool]), ct);
+    }
+
+    private async Task QueueTaskTransition(Guid orgId, Guid actor, Todo todo, TodoTask task, string previousStatus, bool wasFinished, CancellationToken ct)
+    {
+        if (previousStatus != task.Status)
+        {
+            await QueueTask(orgId, actor, todo, task, "status-changed", ct, previousStatus);
+            var fields = new Dictionary<string, string> { ["title"] = task.Title, ["status"] = task.Status, ["previousStatus"] = previousStatus };
+            await events.Enqueue(orgId, todo.ProjectId, actor, new(new("todo-column", previousStatus, todo.Id.ToString()), "task-exited", fields, [BoardNode(todo.Id), TodoTool]), ct);
+            await events.Enqueue(orgId, todo.ProjectId, actor, new(new("todo-column", task.Status, todo.Id.ToString()), "task-entered", fields, [BoardNode(todo.Id), TodoTool]), ct);
+        }
+        if (wasFinished != (task.Status == todo.Columns[^1].Id))
+            await QueueTask(orgId, actor, todo, task, wasFinished ? "task-reopened" : "task-completed", ct);
+    }
+
+    private async Task QueueAssignmentChanges(Guid orgId, Guid actor, Todo todo, TodoTask task, IReadOnlySet<Guid> previous, CancellationToken ct)
+    {
+        var current = task.Assignees.Select(a => a.UserId).ToHashSet();
+        foreach (var added in current.Except(previous)) await QueueTask(orgId, actor, todo, task, "assignee-added", ct, person: added.ToString());
+        foreach (var removed in previous.Except(current)) await QueueTask(orgId, actor, todo, task, "assignee-removed", ct, person: removed.ToString());
+    }
     private Task<Error?> ReserveCreation(Guid userId, CancellationToken ct) => usage.Reserve(
         [new($"create-user:{userId:N}", limits.CreatesPerMinute, 1, TimeSpan.FromMinutes(1))], ct);
     private static readonly Error Missing = new("Todos.NotFound", "The TODO or project was not found.", ErrorType.NotFound);
@@ -119,6 +162,7 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var todo = new Todo(projectId, request.Name, request.Description ?? "", request.TargetDate, clock.GetUtcNow(), request.StartDate);
         db.Add(todo);
         await activity.Queue(new(organizationId, userId, "todo-created", todo.Name, todo.Id, todo.Id, projectId), ct);
+        await QueueBoard(organizationId, userId, todo, "board-created", ct);
         await db.SaveChangesAsync(ct);
         return Result<TodoResponse>.Success(Map(todo));
     }
@@ -140,7 +184,11 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var changed = todo.StartDate != request.StartDate || todo.TargetDate != request.TargetDate;
         todo.SetDates(request.StartDate, request.TargetDate, clock.GetUtcNow());
         todo.TouchBoard(clock.GetUtcNow());
-        if (changed) await activity.Queue(new(organizationId, userId, "todo-updated", todo.Name, todo.Id, todo.Id, projectId), ct);
+        if (changed)
+        {
+            await activity.Queue(new(organizationId, userId, "todo-updated", todo.Name, todo.Id, todo.Id, projectId), ct);
+            await QueueBoard(organizationId, userId, todo, "board-dates-changed", ct);
+        }
         return await SaveBoard(ct) ? Result<TodoResponse>.Success(Map(todo)) : Result<TodoResponse>.Failure(BoardChanged);
     }
 
@@ -156,11 +204,36 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var previousColumns = todo.Columns;
         var now = clock.GetUtcNow();
         var wasFinished = todo.IsFinished();
+        var previousStatuses = todo.Tasks.ToDictionary(task => task.Id, task => task.Status);
         var finishedTasks = todo.Tasks.Where(task => task.Status == previousColumns[^1].Id).Select(task => task.Id).ToHashSet();
         todo.ConfigureColumns(request.Columns, now);
         foreach (var task in todo.Tasks) task.RecordCompletion(finishedTasks.Contains(task.Id), request.Columns[^1].Id, now);
         todo.RecordCompletion(wasFinished, now);
-        if (!previousColumns.SequenceEqual(todo.Columns)) await activity.Queue(new(organizationId, userId, "todo-updated", todo.Name, todo.Id, todo.Id, projectId), ct);
+        if (!previousColumns.SequenceEqual(todo.Columns))
+        {
+            await activity.Queue(new(organizationId, userId, "todo-updated", todo.Name, todo.Id, todo.Id, projectId), ct);
+            await QueueBoard(organizationId, userId, todo, "columns-changed", ct);
+            var oldColumns = previousColumns.Select((column, index) => (column, index)).ToDictionary(entry => entry.column.Id);
+            for (var index = 0; index < todo.Columns.Count; index++)
+            {
+                var column = todo.Columns[index];
+                if (!oldColumns.Remove(column.Id, out var previous)) await QueueColumn(organizationId, userId, todo, column, "column-added", ct);
+                else
+                {
+                    if (previous.column.Name != column.Name) await QueueColumn(organizationId, userId, todo, column, "column-renamed", ct);
+                    if (previous.index != index) await QueueColumn(organizationId, userId, todo, column, "column-reordered", ct);
+                }
+            }
+            foreach (var (column, _) in oldColumns.Values) await QueueColumn(organizationId, userId, todo, column, "column-removed", ct);
+            if (previousColumns[^1].Id != todo.Columns[^1].Id)
+            {
+                await QueueColumn(organizationId, userId, todo, previousColumns[^1], "column-stopped-being-final", ct);
+                await QueueColumn(organizationId, userId, todo, todo.Columns[^1], "column-became-final", ct);
+            }
+            foreach (var task in todo.Tasks)
+                await QueueTaskTransition(organizationId, userId, todo, task, previousStatuses[task.Id], finishedTasks.Contains(task.Id), ct);
+            await QueueBoardCompletion(organizationId, userId, todo, wasFinished, ct);
+        }
         return await SaveBoard(ct) ? Result<TodoResponse>.Success(Map(todo)) : Result<TodoResponse>.Failure(BoardChanged);
     }
 
@@ -186,6 +259,8 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         todo.TouchBoard(now);
         db.Add(task);
         await activity.Queue(new(organizationId, userId, "task-created", task.Title, todoId, task.Id, projectId), ct);
+        await QueueTask(organizationId, userId, todo, task, "task-created", ct);
+        await QueueBoardCompletion(organizationId, userId, todo, wasFinished, ct);
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
     }
 
@@ -197,9 +272,11 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var task = await db.Set<TodoTask>().Include(t => t.Assignees).SingleOrDefaultAsync(t => t.Id == taskId && t.TodoId == todoId, ct);
         if (task is null) return Result<TodoTaskResponse>.Failure(Missing);
         if (await ValidateAssignee(organizationId, request.AssigneeId, ct) is { } assigneeError) return Result<TodoTaskResponse>.Failure(assigneeError);
+        var previous = task.Assignees.Select(a => a.UserId).ToHashSet();
         var changed = QueueAssignments(organizationId, projectId, userId, task, request.AssigneeId is { } assignedId ? [assignedId] : []);
         task.Assign(request.AssigneeId, clock.GetUtcNow());
         if (changed) await activity.Queue(new(organizationId, userId, "task-updated", task.Title, todoId, task.Id, projectId), ct);
+        await QueueAssignmentChanges(organizationId, userId, todo, task, previous, ct);
         todo.TouchBoard(clock.GetUtcNow());
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
     }
@@ -213,12 +290,14 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         if (task is null) return Result<TodoTaskResponse>.Failure(Missing);
         // Former members can be removed, but cannot be newly assigned.
         if (!request.Remove && await ValidateAssignee(organizationId, request.UserId, ct) is { } assigneeError) return Result<TodoTaskResponse>.Failure(assigneeError);
-        var ids = task.Assignees.Select(a => a.UserId).ToHashSet();
+        var previous = task.Assignees.Select(a => a.UserId).ToHashSet();
+        var ids = previous.ToHashSet();
         if (request.Remove) ids.Remove(request.UserId); else ids.Add(request.UserId);
         var changed = QueueAssignments(organizationId, projectId, userId, task, ids);
         task.AssignMany(ids, clock.GetUtcNow());
         todo.TouchBoard(clock.GetUtcNow());
         if (changed) await activity.Queue(new(organizationId, userId, "task-updated", task.Title, todoId, task.Id, projectId), ct);
+        await QueueAssignmentChanges(organizationId, userId, todo, task, previous, ct);
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
     }
 
@@ -238,6 +317,8 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var finishedColumn = todo.Columns[^1].Id;
         var wasFinished = todo.IsFinished();
         var taskWasFinished = task.Status == finishedColumn;
+        var previousStatus = task.Status;
+        var previousAssignees = task.Assignees.Select(a => a.UserId).ToHashSet();
         var changed = task.Title != request.Title.Trim() || task.Description != (request.Description ?? "").Trim() ||
             task.Status != request.Status || task.StartDate != request.StartDate || task.TargetDate != request.TargetDate || !task.Assignees.Select(a => a.UserId).ToHashSet().SetEquals(request.AssigneeIds);
         task.UpdateDetails(request.Title, request.Description ?? "", request.Status, now);
@@ -247,6 +328,10 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         QueueAssignments(organizationId, projectId, userId, task, request.AssigneeIds);
         task.AssignMany(request.AssigneeIds, now);
         if (changed) await activity.Queue(new(organizationId, userId, "task-updated", task.Title, todoId, task.Id, projectId), ct);
+        if (changed) await QueueTask(organizationId, userId, todo, task, "task-updated", ct);
+        await QueueTaskTransition(organizationId, userId, todo, task, previousStatus, taskWasFinished, ct);
+        await QueueAssignmentChanges(organizationId, userId, todo, task, previousAssignees, ct);
+        await QueueBoardCompletion(organizationId, userId, todo, wasFinished, ct);
         todo.TouchBoard(now);
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
     }
@@ -265,6 +350,8 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         db.Remove(task);
         todo.RecordCompletion(wasFinished, now);
         await activity.Queue(new(organizationId, userId, "task-deleted", task.Title, todoId, task.Id, projectId), ct);
+        await QueueTask(organizationId, userId, todo, task, "task-deleted", ct);
+        await QueueBoardCompletion(organizationId, userId, todo, wasFinished, ct);
         todo.TouchBoard(now);
         return await SaveBoard(ct) ? Result<bool>.Success(true) : Result<bool>.Failure(BoardChanged);
     }
@@ -281,11 +368,14 @@ internal sealed class TodoService(ApplicationDbContext db, IOrganizationReposito
         var finishedColumn = todo.Columns[^1].Id;
         var wasFinished = todo.IsFinished();
         var taskWasFinished = task.Status == finishedColumn;
+        var previousStatus = task.Status;
         var changed = task.Status != request.Status;
         task.Move(request.Status, now);
         task.RecordCompletion(taskWasFinished, finishedColumn, now);
         todo.RecordCompletion(wasFinished, now);
         if (changed) await activity.Queue(new(organizationId, userId, "task-updated", task.Title, todoId, task.Id, projectId), ct);
+        await QueueTaskTransition(organizationId, userId, todo, task, previousStatus, taskWasFinished, ct);
+        await QueueBoardCompletion(organizationId, userId, todo, wasFinished, ct);
         todo.TouchBoard(now);
         return await SaveBoard(ct) ? Result<TodoTaskResponse>.Success(Map(task, projectId)) : Result<TodoTaskResponse>.Failure(BoardChanged);
     }

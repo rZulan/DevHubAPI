@@ -14,11 +14,16 @@ namespace DevHub.Infrastructure.Persistence.Migrations
     [DbContext(typeof(ApplicationDbContext))]
     partial class ApplicationDbContextModelSnapshot : ModelSnapshot
     {
+        // If you encounter a merge conflict in the line below, it means you need to
+        // discard one of the migration branches and recreate its migrations on top of
+        // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
+        public override string LastMigrationId => "20261117030439_AddProjectConnections";
+
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "11.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -68,7 +73,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "Provider")
                         .IsUnique();
 
-                    b.ToTable("ExternalAccounts", (string)null);
+                    b.ToTable("ExternalAccounts");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Authentication.GitHubConnection", b =>
@@ -105,7 +110,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasKey("UserId");
 
-                    b.ToTable("GitHubConnections", (string)null);
+                    b.ToTable("GitHubConnections");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Authentication.RefreshToken", b =>
@@ -155,7 +160,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("FamilyId", "RevokedAtUtc");
 
-                    b.ToTable("RefreshTokens", (string)null);
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Chats.ChatConversation", b =>
@@ -207,7 +212,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("[DirectKey] IS NOT NULL");
 
-                    b.ToTable("ChatConversations", (string)null);
+                    b.ToTable("ChatConversations");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Chats.ChatMessage", b =>
@@ -259,7 +264,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ConversationId", "CreatedAtUtc");
 
-                    b.ToTable("ChatMessages", (string)null);
+                    b.ToTable("ChatMessages");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Chats.ChatParticipant", b =>
@@ -283,16 +288,16 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ChatParticipants", (string)null);
+                    b.ToTable("ChatParticipants");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Notifications.UserNotification", b =>
                 {
-                    b.Property<long>("Id")
+                    var id = b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bigint");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(id);
 
                     b.Property<Guid>("ActorUserId")
                         .HasColumnType("uniqueidentifier");
@@ -336,7 +341,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrganizationId", "UserId", "ReadAtUtc");
 
-                    b.ToTable("UserNotifications", (string)null);
+                    b.ToTable("UserNotifications");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.Organization", b =>
@@ -389,7 +394,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OwnerUserId");
 
-                    b.ToTable("Organizations", (string)null);
+                    b.ToTable("Organizations");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationColorScheme", b =>
@@ -500,7 +505,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "UserId", "Name")
                         .IsUnique();
 
-                    b.ToTable("OrganizationColorSchemes", (string)null);
+                    b.ToTable("OrganizationColorSchemes");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationInvite", b =>
@@ -538,7 +543,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique();
 
-                    b.ToTable("OrganizationInvites", (string)null);
+                    b.ToTable("OrganizationInvites");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMember", b =>
@@ -584,7 +589,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("OrganizationMembers", (string)null);
+                    b.ToTable("OrganizationMembers");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationMemberRole", b =>
@@ -605,7 +610,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("OrganizationMemberRoles", (string)null);
+                    b.ToTable("OrganizationMemberRoles");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Organizations.OrganizationRole", b =>
@@ -653,7 +658,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrganizationId", "Position");
 
-                    b.ToTable("OrganizationRoles", (string)null);
+                    b.ToTable("OrganizationRoles");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.BugCategory", b =>
@@ -682,7 +687,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectId", "NormalizedName")
                         .IsUnique();
 
-                    b.ToTable("BugCategories", (string)null);
+                    b.ToTable("BugCategories");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.BugReport", b =>
@@ -771,7 +776,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectId", "SubmissionId")
                         .IsUnique();
 
-                    b.ToTable("BugReports", (string)null);
+                    b.ToTable("BugReports");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.BugReportAttachment", b =>
@@ -803,7 +808,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("BugReportId");
 
-                    b.ToTable("BugReportAttachments", (string)null);
+                    b.ToTable("BugReportAttachments");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.BugReportPortal", b =>
@@ -828,7 +833,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("Token")
                         .IsUnique();
 
-                    b.ToTable("BugReportPortals", (string)null);
+                    b.ToTable("BugReportPortals");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.Project", b =>
@@ -926,7 +931,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "NormalizedName")
                         .IsUnique();
 
-                    b.ToTable("Projects", (string)null);
+                    b.ToTable("Projects");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Projects.ProjectDocument", b =>
@@ -962,7 +967,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("ProjectId", "ToolType")
                         .IsUnique();
 
-                    b.ToTable("ProjectDocuments", null, t =>
+                    b.ToTable("ProjectDocuments", t =>
                         {
                             t.HasCheckConstraint("CK_ProjectDocuments_ContentJson", "[ContentJson] IS NULL OR ISJSON([ContentJson]) = 1");
 
@@ -1015,7 +1020,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "NormalizedName")
                         .IsUnique();
 
-                    b.ToTable("Teams", (string)null);
+                    b.ToTable("Teams");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Teams.TeamMember", b =>
@@ -1033,7 +1038,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TeamMembers", (string)null);
+                    b.ToTable("TeamMembers");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Todos.Todo", b =>
@@ -1086,7 +1091,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.ToTable("Todos", (string)null);
+                    b.ToTable("Todos");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Todos.TodoTask", b =>
@@ -1137,7 +1142,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("TodoId");
 
-                    b.ToTable("TodoTasks", (string)null);
+                    b.ToTable("TodoTasks");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Todos.TodoTaskAssignee", b =>
@@ -1152,7 +1157,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("TodoTaskAssignees", (string)null);
+                    b.ToTable("TodoTaskAssignees");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Users.User", b =>
@@ -1216,7 +1221,210 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                     b.HasIndex("NormalizedUsername")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.QueuedConnectionEvent", b =>
+                {
+                    var position = b.Property<long>("Position")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(position);
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ChainJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DraftJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("FinishedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("LeasedUntilUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long?>("RootPosition")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Position");
+
+                    b.HasIndex("FinishedAtUtc", "Position");
+
+                    b.HasIndex("ProjectId", "Position");
+
+                    b.ToTable("ProjectConnectionEvents");
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.ScheduledCalendarEvent", b =>
+                {
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EntryId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<string>("Event")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTimeOffset>("DueAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("EntryKind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("PublishedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("ProjectId", "EntryId", "Event");
+
+                    b.HasIndex("PublishedAtUtc", "DueAtUtc");
+
+                    b.ToTable("ProjectConnectionCalendarSchedules");
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.StoredConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("NodesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("RulesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "Deleted");
+
+                    b.ToTable("ProjectConnections");
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.StoredConnectionRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ConnectionId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("ConnectionRevision")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Event")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("EventPosition")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("RootPosition")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("RuleId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RuleJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SourceJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<byte[]>("Version")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProjectId", "OccurredAtUtc");
+
+                    b.HasIndex("ProjectId", "RootPosition");
+
+                    b.HasIndex("ConnectionId", "RuleId", "EventPosition")
+                        .IsUnique();
+
+                    b.ToTable("ProjectConnectionRuns");
                 });
 
             modelBuilder.Entity("DevHub.Infrastructure.Workshops.WorkshopUsageBucket", b =>
@@ -1238,7 +1446,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ExpiresAtUtc");
 
-                    b.ToTable("WorkshopUsageBuckets", (string)null);
+                    b.ToTable("WorkshopUsageBuckets");
                 });
 
             modelBuilder.Entity("DevHub.Domain.Authentication.ExternalAccount", b =>
@@ -1572,6 +1780,42 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.QueuedConnectionEvent", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.ScheduledCalendarEvent", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.StoredConnection", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DevHub.Infrastructure.Connections.StoredConnectionRun", b =>
+                {
+                    b.HasOne("DevHub.Domain.Projects.Project", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 

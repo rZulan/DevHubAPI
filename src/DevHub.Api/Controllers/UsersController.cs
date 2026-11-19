@@ -63,6 +63,33 @@ public sealed class UsersController(
     }
 
     /// <summary>
+    /// Browse profiles of other users in Discovery.
+    /// </summary>
+    [HttpGet("discovery")]
+    [ProducesResponseType<DiscoveryProfilePage>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListDiscoveryProfiles([FromQuery] string? after, CancellationToken cancellationToken)
+    {
+        if (GetAuthenticatedUserId() is not { } viewerId)
+            return Unauthorized();
+
+        return Ok(await sender.Send(new ListDiscoveryProfilesQuery(viewerId, after), cancellationToken));
+    }
+
+    /// <summary>
+    /// Get the profile fields visible to other signed-in users.
+    /// </summary>
+    [HttpGet("profiles/{username}")]
+    [ProducesResponseType<DiscoveryProfile>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDiscoveryProfile(string username, CancellationToken cancellationToken)
+    {
+        if (GetAuthenticatedUserId() is null)
+            return Unauthorized();
+
+        var profile = await sender.Send(new GetDiscoveryProfileQuery(username), cancellationToken);
+        return profile is null ? NotFound() : Ok(profile);
+    }
+
+    /// <summary>
     /// Update the current user's public profile.
     /// </summary>
     [HttpPatch("me")]

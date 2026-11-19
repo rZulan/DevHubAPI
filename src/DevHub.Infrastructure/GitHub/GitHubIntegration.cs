@@ -53,7 +53,7 @@ public sealed class GitHubIntegration(ApplicationDbContext db, HttpClient http, 
         var id = account.GetProperty("id").GetInt64();
         var linkedIdentity = await db.ExternalAccounts.AsNoTracking().SingleOrDefaultAsync(a => a.UserId == userId && a.Provider == "github", ct);
         if (linkedIdentity is not null && linkedIdentity.ProviderUserId != id.ToString(System.Globalization.CultureInfo.InvariantCulture))
-            throw new GitHubIntegrationException("Choose the GitHub account already linked to your Zevont login.");
+            throw new GitHubIntegrationException("Choose the GitHub account already linked to your Zhimera login.");
         var connection = await db.Set<GitHubConnection>().SingleOrDefaultAsync(c => c.UserId == userId, ct);
         if (connection is null) {connection = new() {UserId = userId}; db.Add(connection);}
         connection.GitHubUserId = id;
@@ -117,7 +117,7 @@ public sealed class GitHubIntegration(ApplicationDbContext db, HttpClient http, 
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/" + path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", access);
-        request.Headers.UserAgent.ParseAdd("Zevont/1.0");
+        request.Headers.UserAgent.ParseAdd("Zhimera/1.0");
         request.Headers.Accept.Add(new("application/vnd.github+json"));
         request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
         using var response = await http.SendAsync(request, ct);
