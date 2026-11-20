@@ -11,21 +11,51 @@ public sealed partial record ColorSchemePalette(
     string Sidebar,
     string Text)
 {
+    public ColorSchemeGradient? Gradient { get; init; }
+
     public bool IsValid() =>
         IsHexColor(Accent) && IsHexColor(Background) && IsHexColor(Surface) &&
-        IsHexColor(Sidebar) && IsHexColor(Text);
+        IsHexColor(Sidebar) && IsHexColor(Text) && (Gradient is null || Gradient.IsValid());
 
     public ColorSchemePalette Normalize() => new(
         Accent.ToLowerInvariant(),
         Background.ToLowerInvariant(),
         Surface.ToLowerInvariant(),
         Sidebar.ToLowerInvariant(),
-        Text.ToLowerInvariant());
+        Text.ToLowerInvariant()) { Gradient = Gradient?.Normalize() };
 
     public static bool IsHexColor(string? value) => value is not null && HexColor().IsMatch(value);
 
-    [GeneratedRegex("^#[0-9a-fA-F]{6}$")]
+    [GeneratedRegex(@"\A#[0-9a-fA-F]{6}\z")]
     private static partial Regex HexColor();
+}
+
+public sealed record ColorSchemeGradient(string Layout, string Placement, string First, string Second, string Third)
+{
+    public const string AllPlacements = "background,buttons,sidebars,containers,topbars,switches";
+
+    public bool IsValid() =>
+        Layout is "aurora" or "horizon" or "corners" &&
+        HasValidPlacement() &&
+        ColorSchemePalette.IsHexColor(First) && ColorSchemePalette.IsHexColor(Second) && ColorSchemePalette.IsHexColor(Third);
+
+    private bool HasValidPlacement()
+    {
+        // Older schemes use "both" for the background and primary buttons.
+        if (Placement == "both") return true;
+        if (string.IsNullOrEmpty(Placement) || Placement.Length > AllPlacements.Length) return false;
+
+        var targets = Placement.Split(',');
+        return targets.All(target => target is "background" or "buttons" or "sidebars" or "containers" or "topbars" or "switches") &&
+            targets.Distinct().Count() == targets.Length;
+    }
+
+    public ColorSchemeGradient Normalize() => this with
+    {
+        First = First.ToLowerInvariant(),
+        Second = Second.ToLowerInvariant(),
+        Third = Third.ToLowerInvariant(),
+    };
 }
 
 /// <summary>A custom color scheme that belongs to one member of an organization.</summary>
@@ -84,7 +114,7 @@ public sealed class OrganizationColorScheme : BaseEntity
         if (name.Trim().Length > NameMaxLength)
             throw new ArgumentOutOfRangeException(nameof(name), $"Color scheme names are limited to {NameMaxLength} characters.");
         if (!light.IsValid() || !dark.IsValid())
-            throw new ArgumentException("Color scheme palettes must use six-digit hex colors.");
+            throw new ArgumentException("Color scheme palettes must use six-digit hex colors and valid gradient settings.");
 
         Name = name.Trim();
         Light = light.Normalize();

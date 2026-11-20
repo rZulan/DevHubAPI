@@ -135,9 +135,9 @@ internal sealed class MemberAppearanceService(
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > OrganizationColorScheme.NameMaxLength)
             errors[nameof(request.Name)] = [$"Give the color scheme a name of 1 to {OrganizationColorScheme.NameMaxLength} characters."];
         if (request.Light is null || !request.Light.IsValid())
-            errors[nameof(request.Light)] = ["Every light mode color must be a six-digit hex color."];
+            errors[nameof(request.Light)] = ["Use six-digit hex colors and a supported gradient layout and placement for light mode."];
         if (request.Dark is null || !request.Dark.IsValid())
-            errors[nameof(request.Dark)] = ["Every dark mode color must be a six-digit hex color."];
+            errors[nameof(request.Dark)] = ["Use six-digit hex colors and a supported gradient layout and placement for dark mode."];
         return errors.Count == 0
             ? null
             : new Error("Appearance.ValidationFailed", "One or more color scheme fields are invalid.", ErrorType.Validation, errors);

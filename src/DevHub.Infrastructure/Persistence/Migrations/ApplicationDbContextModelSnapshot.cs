@@ -17,7 +17,7 @@ namespace DevHub.Infrastructure.Persistence.Migrations
         // If you encounter a merge conflict in the line below, it means you need to
         // discard one of the migration branches and recreate its migrations on top of
         // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-        public override string LastMigrationId => "20261117030439_AddProjectConnections";
+        public override string LastMigrationId => "20261120050031_AddColorSchemeGradients";
 
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
@@ -438,6 +438,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                                 .HasColumnType("varchar(7)")
                                 .HasColumnName("DarkBackground");
 
+                            b1.Property<string>("Gradient")
+                                .HasMaxLength(160)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(160)")
+                                .HasColumnName("DarkGradient");
+
                             b1.Property<string>("Sidebar")
                                 .IsRequired()
                                 .HasMaxLength(7)
@@ -477,6 +483,12 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                                 .IsUnicode(false)
                                 .HasColumnType("varchar(7)")
                                 .HasColumnName("LightBackground");
+
+                            b1.Property<string>("Gradient")
+                                .HasMaxLength(160)
+                                .IsUnicode(false)
+                                .HasColumnType("varchar(160)")
+                                .HasColumnName("LightGradient");
 
                             b1.Property<string>("Sidebar")
                                 .IsRequired()

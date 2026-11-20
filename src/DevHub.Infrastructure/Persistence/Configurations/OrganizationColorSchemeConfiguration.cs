@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Domain.Organizations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -30,5 +31,12 @@ internal sealed class OrganizationColorSchemeConfiguration : IEntityTypeConfigur
         palette.Property(colors => colors.Surface).HasColumnName($"{mode}Surface").HasMaxLength(7).IsUnicode(false).IsRequired();
         palette.Property(colors => colors.Sidebar).HasColumnName($"{mode}Sidebar").HasMaxLength(7).IsUnicode(false).IsRequired();
         palette.Property(colors => colors.Text).HasColumnName($"{mode}Text").HasMaxLength(7).IsUnicode(false).IsRequired();
+        palette.Property(colors => colors.Gradient)
+            .HasColumnName($"{mode}Gradient")
+            .HasMaxLength(160)
+            .IsUnicode(false)
+            .HasConversion(
+                gradient => JsonSerializer.Serialize(gradient, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<ColorSchemeGradient>(json, (JsonSerializerOptions?)null));
     }
 }

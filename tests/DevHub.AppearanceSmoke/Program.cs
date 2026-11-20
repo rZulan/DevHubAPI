@@ -67,6 +67,21 @@ try
     Check((await service.SetActive(org, member.Id, new("neon"), ct)).Error?.Type == ErrorType.NotFound, "Unknown schemes cannot be chosen");
 
     Check((await service.Create(org, member.Id, Save("Bad", accent: "red"), ct)).Error?.Type == ErrorType.Validation, "Non-hex colors are rejected");
+    var gradient = new ColorSchemeGradient("aurora", ColorSchemeGradient.AllPlacements, "#0879E8", "#4125C9", "#A328D4");
+    var flat = Save("Gradient smoke");
+    var gradientDraft = flat with { Dark = flat.Dark with { Gradient = gradient } };
+    var invalidGradient = flat with { Dark = flat.Dark with { Gradient = gradient with { Layout = "custom" } } };
+    Check((await service.Create(org, member.Id, invalidGradient, ct)).Error?.Type == ErrorType.Validation, "Unknown gradient layouts are rejected");
+    Check((gradient with { Placement = "both" }).IsValid(), "Legacy background-and-button placement remains valid");
+    Check(!(gradient with { Placement = "sidebars,sidebars" }).IsValid(), "Duplicate gradient targets are rejected");
+    var gradientScheme = Require(await service.Create(org, member.Id, gradientDraft, ct));
+    db.ChangeTracker.Clear();
+    var savedGradient = Require(await service.Get(org, member.Id, ct)).CustomSchemes.Single();
+    Check(savedGradient.Light.Gradient is null && savedGradient.Dark.Gradient == gradient.Normalize(), "Custom gradients round-trip per mode while flat palettes stay flat");
+    Require(await service.Update(org, member.Id, Guid.Parse(gradientScheme.Id), flat, ct));
+    db.ChangeTracker.Clear();
+    Check(Require(await service.Get(org, member.Id, ct)).CustomSchemes.Single().Dark.Gradient is null, "A saved gradient can be switched back to flat");
+    Require(await service.Delete(org, member.Id, Guid.Parse(gradientScheme.Id), ct));
     Check((await service.Create(org, member.Id, Save(new string('x', 41)), ct)).Error?.Type == ErrorType.Validation, "Overlong names are rejected");
     Check((await service.Create(org, member.Id, Save("ocean"), ct)).Error?.Type == ErrorType.Conflict, "Custom schemes cannot reuse preset names");
     var mine = Require(await service.Create(org, member.Id, Save("Smoke Brand", accent: "#ABCDEF"), ct));
