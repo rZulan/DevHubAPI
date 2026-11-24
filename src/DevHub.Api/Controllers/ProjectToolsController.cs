@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Application.ProjectTools;
 using DevHub.Api.Realtime;
 using Microsoft.AspNetCore.Authorization;
@@ -26,9 +27,29 @@ public sealed class ProjectToolsController(IProjectToolsService tools, IHubConte
         if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
         var result = await tools.Save(organizationId, projectId, userId, tool, request, ct);
         if (!result.IsSuccess) return Failure(result.Error!);
-        await realtime.Revalidate(organizationId, projectId);
-        await hub.Clients.Group(WorkshopHub.GetProjectToolsGroupName(organizationId, projectId)).SendAsync(
-            "ProjectToolChanged", projectId.ToString(), tool, result.Value!.Revision);
+        await Publish(organizationId, projectId, tool, result.Value!);
         return Ok(result.Value);
+    }
+
+    [HttpPut("initialize")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("workshop-save")]
+    public async Task<IActionResult> Initialize(Guid organizationId, Guid projectId, string tool, InitializeSdlcRequest request, CancellationToken ct)
+    {
+        if (tool != "sdlc") return NotFound();
+        if (!TryGetAuthenticatedUserId(out var userId)) return InvalidAuthenticatedUser();
+        var result = await tools.InitializeSdlc(organizationId, projectId, userId, request, ct);
+        if (!result.IsSuccess) return Failure(result.Error!);
+        await Publish(organizationId, projectId, tool, result.Value!);
+        return Ok(result.Value);
+    }
+
+    private async Task Publish(Guid organizationId, Guid projectId, string tool, ToolDocumentResponse result)
+    {
+        await realtime.Revalidate(organizationId, projectId);
+        var clients = hub.Clients.Group(WorkshopHub.GetProjectToolsGroupName(organizationId, projectId));
+        await clients.SendAsync("ProjectToolChanged", projectId.ToString(), tool, result.Revision);
+        if (tool == "sdlc" && result.Document is { ValueKind: JsonValueKind.Object } document &&
+            document.TryGetProperty("connectToTodo", out var enabled) && enabled.ValueKind == JsonValueKind.True)
+            await clients.SendAsync("ProjectToolChanged", projectId.ToString(), "todo", 0);
     }
 }

@@ -163,7 +163,8 @@ internal static class ConnectionDocuments
 
     internal static IEnumerable<ConnectionEventDraft> Changes(string tool, JsonElement previous, JsonElement next)
     {
-        var before = Snapshots(tool, previous).ToDictionary(item => item.Reference);
+        var newRoadmap = tool == "sdlc" && Text(next, "roadmapId") is { } roadmapId && roadmapId != Text(previous, "roadmapId");
+        var before = Snapshots(tool, newRoadmap ? default : previous).ToDictionary(item => item.Reference);
         var after = Snapshots(tool, next).ToDictionary(item => item.Reference);
         foreach (var (reference, item) in after)
         {
@@ -201,7 +202,7 @@ internal static class ConnectionDocuments
         }
 
         if (tool == "sdlc")
-            foreach (var change in SdlcConnections.Events(previous, next)) yield return change;
+            foreach (var change in SdlcConnections.Events(previous, next, newRoadmap)) yield return change;
 
         var rootProperty = tool switch { "erd" => "dialect", "wiki" => "homePageId", "ui-editor" => "startFrameId", "calendar" => "timeZone", _ => null };
         if (rootProperty is not null && Text(previous, rootProperty) != Text(next, rootProperty))

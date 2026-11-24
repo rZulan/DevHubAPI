@@ -1,6 +1,7 @@
 using System.Text.Json;
 using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Common;
+using DevHub.Application.Connections;
 using DevHub.Application.ProjectTools;
 using DevHub.Domain.Organizations;
 using DevHub.Domain.Projects;
@@ -33,6 +34,10 @@ internal static class OrganizationPermissionPersistenceChecks
         team.AddMember(user.Id, now);
         await db.SaveChangesAsync();
 
+        var connections = services.GetRequiredService<IProjectConnections>();
+        Check((await connections.SetTodoCalendarEnabled(new(project.OrganizationId, project.Id, user.Id), false, default)).Error?.Type == ErrorType.Forbidden,
+            "Project members need Manage connections permission to remove the default connection");
+
         Check(await db.OrganizationRoles.AsNoTracking().AnyAsync(saved => saved.Id == role.Id), "New custom roles are inserted through the organization graph");
         var adjacent = organization.AddRole($"Adjacent {suffix}", "#a78bfa", [], now);
         await db.SaveChangesAsync();
@@ -61,7 +66,9 @@ internal static class OrganizationPermissionPersistenceChecks
             {
                 var loaded = await service.Get(project.OrganizationId, project.Id, user.Id, tool, default);
                 Check(loaded.IsSuccess, $"{permission} retains team project read access");
-                var saved = await service.Save(project.OrganizationId, project.Id, user.Id, tool, new(loaded.Value!.Revision, document), default);
+                var saved = tool == "sdlc" && loaded.Value!.Document is null
+                    ? await service.InitializeSdlc(project.OrganizationId, project.Id, user.Id, new(loaded.Value.Revision, "waterfall", false), default)
+                    : await service.Save(project.OrganizationId, project.Id, user.Id, tool, new(loaded.Value!.Revision, document), default);
                 Check(permissions[tool] == permission ? saved.IsSuccess : saved.Error?.Type == ErrorType.Forbidden,
                     $"{permission} {(permissions[tool] == permission ? "permits" : "does not permit")} {tool} writes through SQL");
             }

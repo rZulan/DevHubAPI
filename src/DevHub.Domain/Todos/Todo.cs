@@ -6,8 +6,8 @@ namespace DevHub.Domain.Todos;
 public sealed class Todo : BaseEntity
 {
     private Todo() { }
-    public Todo(Guid projectId, string name, string description, DateOnly? targetDate, DateTimeOffset now, DateOnly? startDate = null)
-        : base(Guid.NewGuid(), now)
+    public Todo(Guid projectId, string name, string description, DateOnly? targetDate, DateTimeOffset now, DateOnly? startDate = null, Guid? id = null)
+        : base(id ?? Guid.NewGuid(), now)
     {
         ProjectId = projectId;
         Name = name.Trim();
@@ -67,8 +67,8 @@ public sealed record TodoColumn(string Id, string Name);
 public sealed class TodoTask : BaseEntity
 {
     private TodoTask() { }
-    public TodoTask(Guid todoId, string title, string description, string status, DateTimeOffset now)
-        : base(Guid.NewGuid(), now)
+    public TodoTask(Guid todoId, string title, string description, string status, DateTimeOffset now, Guid? id = null)
+        : base(id ?? Guid.NewGuid(), now)
     {
         TodoId = todoId;
         Title = title.Trim();
@@ -79,6 +79,7 @@ public sealed class TodoTask : BaseEntity
     public string Title { get; private set; } = string.Empty;
     public string Description { get; private set; } = string.Empty;
     public string Status { get; private set; } = "pending";
+    public int? SortOrder { get; private set; }
     public Guid? AssigneeId { get; private set; }
     public DateOnly? StartDate { get; private set; }
     public DateOnly? TargetDate { get; private set; }
@@ -103,10 +104,17 @@ public sealed class TodoTask : BaseEntity
         AssigneeId = ids.Select(id => (Guid?)id).FirstOrDefault();
         MarkUpdated(now);
     }
-    public void Move(string status, DateTimeOffset now) { Status = status; MarkUpdated(now); }
+    public void SetSortOrder(int position) => SortOrder = position;
+    public void Move(string status, DateTimeOffset now)
+    {
+        if (Status != status) SortOrder = null;
+        Status = status;
+        MarkUpdated(now);
+    }
     public void UpdateDetails(string title, string description, string status, DateTimeOffset now)
     {
-        Title = title.Trim(); Description = description.Trim(); Status = status; MarkUpdated(now);
+        Title = title.Trim(); Description = description.Trim();
+        Move(status, now);
     }
 }
 

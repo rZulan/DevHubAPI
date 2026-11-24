@@ -74,7 +74,8 @@ internal static class ProjectMappings
         project.TargetDate,
         project.CreatedAtUtc,
         project.UpdatedAtUtc,
-        project.GitHubLinks());
+        project.GitHubLinks(),
+        project.TodoCalendarEnabled);
 
     public static bool TryParseStatus(string status, out ProjectStatus parsedStatus) =>
         Enum.TryParse(

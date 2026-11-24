@@ -39,6 +39,16 @@ internal sealed class ProjectConnections(ApplicationDbContext db, ConnectionAuth
         return Result<ConnectionAccessResponse>.Success(new(await access.HasManagePermission(scope, ct)));
     }
 
+    public async Task<Result<bool>> SetTodoCalendarEnabled(ConnectionScope scope, bool enabled, CancellationToken ct)
+    {
+        var permission = await RequireManage(scope, ct);
+        if (permission is not null) return Result<bool>.Failure(permission);
+
+        var updated = await db.Projects.Where(project => project.Id == scope.ProjectId && project.OrganizationId == scope.OrganizationId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(project => project.TodoCalendarEnabled, enabled), ct);
+        return updated == 1 ? Result<bool>.Success(enabled) : Result<bool>.Failure(Missing);
+    }
+
     public async Task<Result<IReadOnlyList<ConnectionCapability>>> Catalog(ConnectionScope scope, CancellationToken ct) =>
         await access.CanView(scope, ct)
             ? Result<IReadOnlyList<ConnectionCapability>>.Success(tools.Catalog.Select(capability => capability with

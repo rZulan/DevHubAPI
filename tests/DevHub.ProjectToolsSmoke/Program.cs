@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DevHub.Application.Common;
 using DevHub.Application.ProjectTools;
 using DevHub.Infrastructure;
@@ -67,17 +68,21 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
     await using var transaction = await db.Database.BeginTransactionAsync();
     try
     {
-        var project = await db.Projects.AsNoTracking().FirstAsync();
+        var projects = db.Projects.AsNoTracking();
+        var project = isolatedDatabase is null ? await projects.FirstAsync() : await projects.SingleAsync(item => item.Name == "Smoke project");
         var owner = await db.Organizations.Where(o => o.Id == project.OrganizationId).Select(o => o.OwnerUserId).SingleAsync();
         await OrganizationPermissionPersistenceChecks.Run(scope.ServiceProvider, project, documents);
         foreach (var (tool, document) in documents)
         {
             var initial = Require(await service.Get(project.OrganizationId, project.Id, owner, tool, default));
+            if (tool == "sdlc" && (initial.Document is not { } roadmap || roadmap.GetProperty("model").GetString() != "waterfall"))
+                initial = Require(await service.InitializeSdlc(project.OrganizationId, project.Id, owner, new(initial.Revision, "waterfall", false), default));
             var saved = Require(await service.Save(project.OrganizationId, project.Id, owner, tool, new(initial.Revision, document), default));
             var loaded = Require(await service.Get(project.OrganizationId, project.Id, owner, tool, default));
-            Check(loaded.Revision == initial.Revision + 1 && loaded.Document?.GetRawText() == document.GetRawText(), $"{tool} round trips through SQL with its own revision");
+            Check(loaded.Revision == initial.Revision + 1 && loaded.Document?.GetRawText() == saved.Document?.GetRawText()
+                && SameDocument(tool, document, loaded.Document!.Value), $"{tool} round trips through SQL with its own revision");
             var stored = await db.ProjectDocuments.AsNoTracking().SingleAsync(row => row.ProjectId == project.Id && row.ToolType == tool);
-            Check(stored.ContentJson == document.GetRawText() && stored.Revision == saved.Revision && stored.UpdatedByUserId == owner && stored.UpdatedAtUtc is not null,
+            Check(stored.ContentJson == saved.Document?.GetRawText() && stored.Revision == saved.Revision && stored.UpdatedByUserId == owner && stored.UpdatedAtUtc is not null,
                 $"{tool} saves its content and editor metadata in ProjectDocuments");
             Check((await service.Save(project.OrganizationId, project.Id, owner, tool, new(initial.Revision, document), default)).Error?.Type == ErrorType.Conflict, $"{tool} stale writes cannot overwrite newer changes");
             Check((await service.Save(project.OrganizationId, project.Id, Guid.NewGuid(), tool, new(saved.Revision, document), default)).Error?.Type == ErrorType.NotFound, $"{tool} non-members cannot write");
@@ -100,14 +105,28 @@ await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
             """{"model":"iterative","currentPhase":0,"completed":false,"notes":{"planning":"Next version"},"cycle":2,"history":[{"cycle":1,"notes":{"evaluate":"Approved"},"release":{"currentPhase":1,"completed":true,"notes":{"deployment":"Shipped","maintenance":"Reviewed"}}}]}"""
         })
         {
-            var roadmap = Json(json);
+            var snapshot = JsonNode.Parse(json)!.AsObject();
+            snapshot.Remove("modelStates");
+            var roadmap = JsonSerializer.SerializeToElement(snapshot);
+            var model = roadmap.GetProperty("model").GetString()!;
             var before = Require(await service.Get(project.OrganizationId, project.Id, owner, "sdlc", default));
-            var saved = Require(await service.Save(project.OrganizationId, project.Id, owner, "sdlc", new(before.Revision, roadmap), default));
+            var initialized = Require(await service.InitializeSdlc(project.OrganizationId, project.Id, owner, new(before.Revision, model, false), default));
+            var saved = Require(await service.Save(project.OrganizationId, project.Id, owner, "sdlc", new(initialized.Revision, roadmap), default));
             var loaded = Require(await service.Get(project.OrganizationId, project.Id, owner, "sdlc", default));
-            Check(loaded.Revision == saved.Revision && loaded.Document?.GetRawText() == roadmap.GetRawText(), $"{roadmap.GetProperty("model").GetString()} progress, inactive models and cycle notes persist through SQL");
+            Check(loaded.Revision == saved.Revision && SameDocument("sdlc", roadmap, loaded.Document!.Value),
+                $"{model} progress and cycle notes persist through SQL");
         }
     }
     finally {await transaction.RollbackAsync(); Console.WriteLine("All project document test writes rolled back.");}
 });
+static bool SameDocument(string tool, JsonElement draft, JsonElement saved)
+{
+    if (tool != "sdlc") return saved.GetRawText() == draft.GetRawText();
+    var roadmap = JsonNode.Parse(saved.GetRawText())!.AsObject();
+    roadmap.Remove("creatorId");
+    roadmap.Remove("roadmapId");
+    roadmap.Remove("connectToTodo");
+    return JsonElement.DeepEquals(draft, JsonSerializer.SerializeToElement(roadmap));
+}
 static T Require<T>(Result<T> result) => result.IsSuccess ? result.Value! : throw new Exception(result.Error!.Code);
 static void Check(bool condition, string message) {if (!condition) throw new Exception(message); Console.WriteLine("PASS: " + message);}

@@ -12,7 +12,7 @@ public sealed record CreateTodoTaskRequest([Required, StringLength(150)] string 
 public sealed record AssignTodoTaskRequest(Guid? AssigneeId);
 public sealed record ChangeTodoTaskAssigneeRequest(Guid UserId, bool Remove = false);
 public sealed record ConfigureTodoColumnsRequest([Required] IReadOnlyList<TodoColumn> Columns, int BoardRevision);
-public sealed record MoveTodoTaskRequest([Required, StringLength(20)] string Status);
+public sealed record MoveTodoTaskRequest([Required, StringLength(20)] string Status, int? Position = null, int? BoardRevision = null);
 public sealed record UpdateTodoTaskRequest([Required, StringLength(150)] string Title,
     [StringLength(2000)] string? Description, [Required, StringLength(20)] string Status,
     [Required] IReadOnlyList<Guid> AssigneeIds, int BoardRevision, DateOnly? TargetDate = null, DateOnly? StartDate = null);

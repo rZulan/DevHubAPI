@@ -929,6 +929,11 @@ namespace DevHub.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<bool>("TodoCalendarEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTimeOffset?>("UpdatedAtUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -1125,6 +1130,9 @@ namespace DevHub.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("FinishedAtUtc")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("SortOrder")
+                        .HasColumnType("int");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");

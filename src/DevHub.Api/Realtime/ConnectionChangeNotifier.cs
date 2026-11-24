@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DevHub.Application.Connections;
 using DevHub.Application.ProjectTools;
 using Microsoft.AspNetCore.SignalR;
@@ -25,15 +26,19 @@ internal sealed class ConnectionChangeNotifier(IProjectToolsService documents, W
         if (tool is null) return;
 
         var revision = 0;
+        var notifyTodo = false;
         if (tool is not ("todo" or "bug-reports"))
         {
             var document = await documents.Get(scope.OrganizationId, scope.ProjectId, scope.UserId, tool, ct);
             if (!document.IsSuccess) return;
             revision = document.Value!.Revision;
+            notifyTodo = tool == "sdlc" && document.Value.Document is { ValueKind: JsonValueKind.Object } roadmap &&
+                roadmap.TryGetProperty("connectToTodo", out var enabled) && enabled.ValueKind == JsonValueKind.True;
         }
 
         await realtime.Revalidate(scope.OrganizationId, scope.ProjectId);
-        await hub.Clients.Group(WorkshopHub.GetProjectToolsGroupName(scope.OrganizationId, scope.ProjectId)).SendAsync(
-            "ProjectToolChanged", scope.ProjectId.ToString(), tool, revision, ct);
+        var clients = hub.Clients.Group(WorkshopHub.GetProjectToolsGroupName(scope.OrganizationId, scope.ProjectId));
+        await clients.SendAsync("ProjectToolChanged", scope.ProjectId.ToString(), tool, revision, ct);
+        if (notifyTodo) await clients.SendAsync("ProjectToolChanged", scope.ProjectId.ToString(), "todo", 0, ct);
     }
 }

@@ -7,17 +7,13 @@ namespace DevHub.Infrastructure.Connections;
 
 internal static partial class SdlcConnections
 {
-    private static readonly string[] ProgressKeys = ["currentPhase", "completed", "notes", "work", "cycle", "history", "release", "released"];
-
     internal static bool Apply(JsonObject document, ConnectionAction action)
     {
         var model = document["model"]?.GetValue<string>() ?? "waterfall";
         var target = action.Target;
         string Argument(string key) => action.Arguments.GetValueOrDefault(key) ?? "";
-        if (action.Kind is "activate-model" or "set-active-model")
-            return Activate(document, model, action.Kind == "activate-model" ? target.Id ?? "" : Argument("model"));
         if (target.Kind != "sdlc" && (target.Kind == "sdlc-model" ? target.Id : target.ParentId) != model)
-            throw new ArgumentException("Switch to the linked roadmap model before editing its progress.");
+            throw new ArgumentException("The linked model is no longer the active roadmap.");
 
         var definition = Models[model];
         var cycle = document["cycle"]?.GetValue<int>() ?? 1;
@@ -65,7 +61,7 @@ internal static partial class SdlcConnections
         var phaseWork = workItems[phase.Key] as JsonObject ?? new JsonObject();
         bool changed = action.Kind switch
         {
-            "set-owner" => SetOptional(phaseWork, "ownerId", Argument("ownerId")),
+            "set-owner" => SetFirstAssignee(phaseWork, Argument("ownerId")),
             "set-date" => SetOptional(phaseWork, "targetDate", Argument("targetDate")),
             "block" => Set(phaseWork, "blocked", JsonValue.Create(true)) | SetOptional(phaseWork, "blocker", Argument("blocker")),
             "unblock" => phaseWork.Remove("blocked") | phaseWork.Remove("blocker"),
@@ -88,26 +84,6 @@ internal static partial class SdlcConnections
         if (model == "agile") progress["released"] = progress["released"]?.GetValue<bool>() == true || current == 5;
         if (index == phases.Length - 1) progress["completed"] = true;
         else progress["currentPhase"] = model == "agile" && current == 4 ? 6 : index + 1;
-        return true;
-    }
-
-    private static bool Activate(JsonObject root, string model, string desired)
-    {
-        if (!Models.ContainsKey(desired)) throw new ArgumentException("Select a supported roadmap model.");
-        if (model == desired) return false;
-        var states = root["modelStates"] as JsonObject ?? new JsonObject();
-        var restored = states[desired] as JsonObject ?? EmptyProgress();
-        var archived = new JsonObject();
-        foreach (var key in ProgressKeys)
-        {
-            if (root[key] is { } value) archived[key] = value.DeepClone();
-            if (restored[key] is { } saved) root[key] = saved.DeepClone();
-            else root.Remove(key);
-        }
-        states[model] = archived;
-        states.Remove(desired);
-        if (states.Parent is null) root["modelStates"] = states;
-        root["model"] = desired;
         return true;
     }
 
@@ -137,14 +113,27 @@ internal static partial class SdlcConnections
 
     private static bool CheckDeliverable(Phase phase, JsonObject work, string item, bool check)
     {
-        if (!Deliverables(phase).Contains(item, StringComparer.Ordinal)) throw new ArgumentException("Choose a deliverable listed for this phase.");
+        var snapshot = JsonSerializer.SerializeToElement(work);
+        item = DeliverableName(phase, snapshot, item);
+        if (!Deliverables(phase, snapshot).Contains(item, StringComparer.Ordinal))
+            throw new ArgumentException("Choose a deliverable listed for this phase.");
         var checkedItems = work["checked"] as JsonArray ?? new JsonArray();
-        var existing = checkedItems.FirstOrDefault(value => value?.GetValue<string>() == item);
-        if (check == (existing is not null)) return false;
+        var existing = checkedItems.Where(value => value?.GetValue<string>() is { } name && DeliverableName(phase, snapshot, name) == item).ToArray();
+        if (check == (existing.Length > 0)) return false;
         if (check) checkedItems.Add(item);
-        else checkedItems.Remove(existing);
+        else foreach (var match in existing) checkedItems.Remove(match);
         if (checkedItems.Parent is null) work["checked"] = checkedItems;
         return true;
+    }
+
+    private static bool SetFirstAssignee(JsonObject work, string id)
+    {
+        if (work["assigneeIds"] is not JsonArray assignees) return SetOptional(work, "ownerId", id);
+        var next = new JsonArray();
+        if (id.Length > 0) next.Add(id);
+        foreach (var member in assignees.Skip(1))
+            if (member?.GetValue<string>() != id) next.Add(member?.DeepClone());
+        return Set(work, "assigneeIds", next);
     }
 
     private static bool SetOptional(JsonObject item, string key, string value) => value.Length == 0 ? item.Remove(key) : Set(item, key, JsonValue.Create(value));

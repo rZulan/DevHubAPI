@@ -66,6 +66,8 @@ public static class DependencyInjection
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<DevHub.Infrastructure.ProjectTools.ProjectDocumentStore>();
+        services.AddScoped<DevHub.Infrastructure.ProjectTools.SdlcTodoSync>();
+        services.AddScoped<DevHub.Infrastructure.Todos.TodoConnectionEvents>();
         services.AddScoped<IChatService, ChatService>();
         services.AddScoped<DevHub.Application.Notifications.INotificationService, DevHub.Infrastructure.Notifications.NotificationService>();
         services.AddScoped<DevHub.Application.Notifications.IWorkshopActivity, DevHub.Infrastructure.Notifications.WorkshopActivityRecorder>();

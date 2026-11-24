@@ -927,6 +927,11 @@ partial class _20261120050031_AddColorSchemeGradients
                     .HasMaxLength(2000)
                     .HasColumnType("nvarchar(2000)");
 
+                b.Property<bool>("TodoCalendarEnabled")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("bit")
+                    .HasDefaultValue(true);
+
                 b.Property<DateTimeOffset?>("UpdatedAtUtc")
                     .HasColumnType("datetimeoffset");
 

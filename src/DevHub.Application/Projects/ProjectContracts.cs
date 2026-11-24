@@ -25,7 +25,8 @@ public sealed record ProjectResponse(
     DateOnly? TargetDate,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? UpdatedAtUtc,
-    IReadOnlyList<GitHubRepositoryLink>? GitHubRepositories = null);
+    IReadOnlyList<GitHubRepositoryLink>? GitHubRepositories = null,
+    bool TodoCalendarEnabled = true);
 
 public sealed record CreateProjectCommand(
     Guid OrganizationId,

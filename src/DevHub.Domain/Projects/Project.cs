@@ -80,6 +80,7 @@ public sealed class Project : BaseEntity
     public string Environments { get; private set; } = string.Empty;
     public DateOnly? StartDate { get; private set; }
     public DateOnly? TargetDate { get; private set; }
+    public bool TodoCalendarEnabled { get; private set; } = true;
     public Organization Organization { get; private set; } = null!;
     public Team Team { get; private set; } = null!;
     public User Lead { get; private set; } = null!;

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using DevHub.Api.Realtime;
 using DevHub.Application.Common;
 using DevHub.Application.Connections;
 using Microsoft.AspNetCore.Authorization;
@@ -9,8 +11,10 @@ namespace DevHub.Api.Controllers;
 [Authorize]
 [Tags("Project connections")]
 [Route("api/organizations/{organizationId:guid}/projects/{projectId:guid}/connections")]
-public sealed class ProjectConnectionsController(IProjectConnections connections) : ApiControllerBase
+public sealed class ProjectConnectionsController(IProjectConnections connections, WorkshopRealtime realtime) : ApiControllerBase
 {
+    public sealed record SetTodoCalendarRequest([property: JsonRequired] bool Enabled);
+
     [HttpGet]
     public Task<IActionResult> List(Guid organizationId, Guid projectId, CancellationToken ct) =>
         WithScope(organizationId, projectId, scope => connections.List(scope, ct));
@@ -18,6 +22,16 @@ public sealed class ProjectConnectionsController(IProjectConnections connections
     [HttpGet("access")]
     public Task<IActionResult> Access(Guid organizationId, Guid projectId, CancellationToken ct) =>
         WithScope(organizationId, projectId, scope => connections.Access(scope, ct));
+
+    [HttpPut("todo-calendar")]
+    [EnableRateLimiting("workshop-save")]
+    public Task<IActionResult> SetTodoCalendar(Guid organizationId, Guid projectId, SetTodoCalendarRequest request, CancellationToken ct) =>
+        WithScope(organizationId, projectId, async scope =>
+        {
+            var result = await connections.SetTodoCalendarEnabled(scope, request.Enabled, ct);
+            if (result.IsSuccess) await realtime.Changed(organizationId);
+            return result;
+        });
 
     [HttpGet("catalog")]
     public Task<IActionResult> Catalog(Guid organizationId, Guid projectId, CancellationToken ct) =>

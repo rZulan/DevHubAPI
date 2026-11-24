@@ -224,6 +224,29 @@ try
     db.ChangeTracker.Clear();
     var reopened = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
     Check(reopened.FinishedAtUtc is null && reopened.Tasks.Single().FinishedAtUtc is null, "Reopening clears current completion dates");
+
+    var otherCompleted = Require(await service.AddTask(org, project.Id, completionBoard.Id, owner, new("Completed later", "", "done"), ct));
+    var beforePlacement = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
+    Require(await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, owner, new("done", 1, beforePlacement.BoardRevision), ct));
+    db.ChangeTracker.Clear();
+    var placed = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
+    Check(placed.Tasks.Select(t => t.Id).SequenceEqual([otherCompleted.Id, completionTask.Id]) && placed.Tasks.All(t => t.Status == "done"),
+        "Dropping into another column saves both position and status");
+
+    var reorder = new MoveTodoTaskRequest("done", 0, placed.BoardRevision);
+    Check((await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, secondPerson.Id, reorder, ct)).Error?.Type == ErrorType.Forbidden,
+        "Read-only members cannot reorder tasks");
+    Check((await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, owner, reorder with { Position = 2 }, ct)).Error?.Type == ErrorType.Validation,
+        "Positions beyond the column are rejected");
+    Require(await service.MoveTask(org, project.Id, completionBoard.Id, completionTask.Id, owner, reorder, ct));
+    Check((await service.MoveTask(org, project.Id, completionBoard.Id, otherCompleted.Id, owner, reorder, ct)).Error?.Type == ErrorType.Conflict,
+        "A stale reorder cannot overwrite a newer order");
+    db.ChangeTracker.Clear();
+    var reordered = Require(await service.Get(org, project.Id, completionBoard.Id, owner, ct));
+    Check(reordered.Tasks.Select(t => t.Id).SequenceEqual([completionTask.Id, otherCompleted.Id]) && reordered.BoardRevision == placed.BoardRevision + 1,
+        "Vertical reordering persists after reload and advances the board revision");
+    Check(reordered.FinishedAtUtc == placed.FinishedAtUtc && reordered.Tasks.All(t => t.FinishedAtUtc == placed.Tasks.Single(p => p.Id == t.Id).FinishedAtUtc),
+        "Reordering keeps board and task completion dates");
     Console.WriteLine("TODO persistence smoke checks passed.");
 }
 finally

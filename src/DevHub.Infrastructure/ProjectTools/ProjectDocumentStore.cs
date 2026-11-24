@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DevHub.Application.Abstractions.Persistence;
 using DevHub.Application.Connections;
 using DevHub.Domain.Projects;
 using DevHub.Infrastructure.Connections;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DevHub.Infrastructure.ProjectTools;
 
-internal sealed class ProjectDocumentStore(ApplicationDbContext db, IConnectionEvents events, IConnectionCalendarSchedule calendarSchedule)
+internal sealed class ProjectDocumentStore(ApplicationDbContext db, IConnectionEvents events, IConnectionCalendarSchedule calendarSchedule, SdlcTodoSync sdlcTodos)
 {
     public Task<ProjectDocument?> Get(Guid organizationId, Guid projectId, string tool, CancellationToken ct) =>
         db.ProjectDocuments.AsNoTracking().SingleOrDefaultAsync(document =>
@@ -26,9 +27,17 @@ internal sealed class ProjectDocumentStore(ApplicationDbContext db, IConnectionE
             // Each attempt reconstructs the persisted diff and schedule after a transient failure.
             if (attempts++ > 0) db.ChangeTracker.Clear();
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
-            var saved = await SaveAndEnqueue(organizationId, projectId, userId, tool, revision, json, ct);
-            if (saved) await transaction.CommitAsync(ct);
-            return saved;
+            try
+            {
+                var saved = await SaveAndEnqueue(organizationId, projectId, userId, tool, revision, json, ct);
+                if (saved) await transaction.CommitAsync(ct);
+                return saved;
+            }
+            catch (PersistenceConcurrencyException) when (tool == "sdlc")
+            {
+                db.ChangeTracker.Clear();
+                return false;
+            }
         });
     }
 
@@ -44,7 +53,9 @@ internal sealed class ProjectDocumentStore(ApplicationDbContext db, IConnectionE
         foreach (var change in changes)
             await events.Enqueue(organizationId, projectId, userId, change, ct);
         if (tool == "calendar") await calendarSchedule.Sync(organizationId, projectId, nextDocument.RootElement, ct);
-        if (changes.Length > 0 || tool == "calendar") await db.SaveChangesAsync(ct);
+        var todosChanged = tool == "sdlc" && await sdlcTodos.Sync(organizationId, projectId, userId,
+            previousDocument?.RootElement ?? default, nextDocument.RootElement, ct);
+        if (changes.Length > 0 || tool == "calendar" || todosChanged) await db.SaveChangesAsync(ct);
         return true;
     }
 

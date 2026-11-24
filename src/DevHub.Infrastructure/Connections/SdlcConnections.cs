@@ -10,6 +10,8 @@ internal static partial class SdlcConnections
 {
     private sealed record Phase(string Key, string Title, string Deliverables, bool Ongoing = false, bool Optional = false);
     private sealed record Model(string Title, Phase[] Phases, string? CycleLabel = null);
+    internal sealed record TodoDeliverable(string Name, DateOnly? TargetDate, bool Checked);
+    internal sealed record TodoPhase(string Key, string Name, string Description, DateOnly? TargetDate, TodoDeliverable[] Deliverables);
 
     private static readonly Phase[] Waterfall =
     [new("requirements", "Requirements", "Requirements specification, stakeholder approval"),
@@ -44,7 +46,7 @@ internal static partial class SdlcConnections
             new("retrospective", "Retrospective", "Team improvements, next Sprint adaptations")], "Sprint"),
         ["iterative"] = new("Iterative",
         [new("planning", "Plan", "Iteration goals, prioritized improvements"),
-            new("analysis", "Analyze", "Explored requirements, risk assessment"),
+            new("analysis", "Analyze", "Refined requirements, risk assessment"),
             new("design", "Design", "Updated designs, implementation plan"),
             new("build", "Build", "Updated software, technical documentation"),
             new("test", "Test", "Test results, regression results, defect fixes"),
@@ -70,17 +72,17 @@ internal static partial class SdlcConnections
 
     internal static IReadOnlyList<ConnectionCapability> Capabilities { get; } =
     [new("sdlc", "sdlc", "SDLC Roadmap", [Choice("active-model-changed", "Active model changed", ModelField with { Required = false }), .. CycleEvents, .. PhaseEvents],
-            [Exists, Choice("active-model-is", "Active model is", ModelField)], [Choice("set-active-model", "Switch active model", ModelField), Advance, StartCycle, StartRelease]),
+            [Exists, Choice("active-model-is", "Active model is", ModelField)], [Advance, StartCycle, StartRelease]),
         new("sdlc-model", "sdlc", "Roadmap model", [Choice("active-model-changed", "This model became active"), Choice("model-updated", "Model progress updated"), .. CycleEvents, .. PhaseEvents],
-            [Exists, Choice("model-active", "This model is active"), Complete], [Choice("activate-model", "Make this model active"), Advance, StartCycle, StartRelease]),
+            [Exists, Choice("model-active", "This model is active"), Complete], [Advance, StartCycle, StartRelease]),
         new("sdlc-cycle", "sdlc", "Sprint or iteration", [Choice("cycle-completed", "Cycle completed"), Choice("cycle-updated", "Cycle progress updated"), .. PhaseEvents],
             [Exists, Complete], [Advance, StartCycle, StartRelease]),
         new("sdlc-release", "sdlc", "Release", [Choice("release-completed", "Release completed"), Choice("release-updated", "Release progress updated"), .. PhaseEvents],
             [Exists, Complete], [Advance, StartCycle]),
         new("sdlc-phase", "sdlc", "Roadmap phase", PhaseEvents,
             [Exists, Choice("phase-status-is", "Phase status is", StatusField), Choice("phase-blocked", "Phase is blocked"),
-                Choice("phase-owner-is", "Phase owner is", Field("ownerId", "Owner ID")), Choice("phase-checklist-done", "All phase deliverables are checked")],
-            [Choice("set-current", "Set as current phase"), Advance, Choice("set-owner", "Set or clear phase owner", Field("ownerId", "Owner ID", required: false)),
+                Choice("phase-owner-is", "Phase includes assignee", Field("ownerId", "Assignee ID")), Choice("phase-checklist-done", "All phase deliverables are checked")],
+            [Choice("set-current", "Set as current phase"), Advance, Choice("set-owner", "Set or clear first phase assignee", Field("ownerId", "Assignee ID", required: false)),
                 Choice("set-date", "Set or clear phase target date", Field("targetDate", "Target date", "date", false)),
                 Choice("block", "Block phase", Field("blocker", "Blocker", "multiline", false)), Choice("unblock", "Clear phase blocker"),
                 Choice("set-phase-note", "Replace phase notes", Field("note", "Notes", "multiline", false)),
@@ -92,12 +94,12 @@ internal static partial class SdlcConnections
         var activeModel = Text(document, "model");
         foreach (var (model, definition) in Models)
         {
-            var active = model == activeModel;
-            var progress = active ? document : Property(Property(document, "modelStates"), model);
+            if (model != activeModel) continue;
+            var progress = document;
             var modelRef = new ConnectionNodeRef("sdlc-model", model);
             var path = $"SDLC Roadmap › {definition.Title}";
             var modelFields = new Dictionary<string, string> { ["name"] = definition.Title, ["model"] = model,
-                ["active"] = active ? "true" : "false", ["completed"] = Flag(progress, "completed") ? "true" : "false" };
+                ["active"] = "true", ["completed"] = Flag(progress, "completed") ? "true" : "false" };
             yield return new(modelRef, definition.Title, path, [Root], modelFields, Track(progress, "currentPhase", "completed", "cycle", "released"));
             if (progress.ValueKind != JsonValueKind.Object) continue;
 
@@ -125,6 +127,30 @@ internal static partial class SdlcConnections
         }
     }
 
+    internal static IEnumerable<TodoPhase> TodoPhases(JsonElement document)
+    {
+        if (!Models.TryGetValue(Text(document, "model"), out var model)) yield break;
+        var cycle = Number(document, "cycle", 1).ToString(CultureInfo.InvariantCulture);
+        var description = model.CycleLabel is { } label ? $"{model.Title} roadmap · {label} {cycle}" : $"{model.Title} roadmap";
+        foreach (var phase in model.Phases) yield return ToTodoPhase(document, phase, $"{cycle}:{phase.Key}", description);
+        var release = Property(document, "release");
+        if (release.ValueKind == JsonValueKind.Object)
+            foreach (var phase in ReleasePhases)
+                yield return ToTodoPhase(release, phase, $"{cycle}:release:{phase.Key}", $"{description} · Release path");
+    }
+
+    private static TodoPhase ToTodoPhase(JsonElement progress, Phase phase, string key, string description)
+    {
+        var work = Property(Property(progress, "work"), phase.Key);
+        var dates = Property(work, "deliverableTargetDates");
+        var completed = CheckedDeliverables(phase, work);
+        return new(key, phase.Title, description, Date(work, "targetDate"),
+            Deliverables(phase, work).Select(item => new TodoDeliverable(item, Date(dates, item), completed.Contains(item))).ToArray());
+    }
+
+    private static DateOnly? Date(JsonElement value, string key) =>
+        DateOnly.TryParseExact(Text(value, key), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) ? date : null;
+
     private static IEnumerable<ConnectionSnapshot> PhaseSnapshots(JsonElement progress, string model, string cycle, Phase[] phases,
         string path, IReadOnlyList<ConnectionNodeRef> ancestors, bool release)
     {
@@ -139,23 +165,25 @@ internal static partial class SdlcConnections
                 ? current != 5 && (Property(progress, "released").ValueKind == JsonValueKind.Undefined ? current >= 6 : Flag(progress, "released"))
                 : completed || index < current);
             var status = done ? "completed" : Flag(work, "blocked") ? "blocked" : phase.Ongoing ? "ongoing" : index == current ? "current" : phase.Optional ? "optional" : "upcoming";
+            var assignees = Assignees(work);
             var fields = new Dictionary<string, string> { ["name"] = phase.Title, ["model"] = model, ["cycle"] = cycle, ["phase"] = phase.Key,
                 ["status"] = status, ["blocked"] = Flag(work, "blocked") ? "true" : "false", ["current"] = !completed && index == current ? "true" : "false",
-                ["ownerId"] = Text(work, "ownerId"), ["targetDate"] = Text(work, "targetDate"), ["checklistDone"] = Ready(phase, work) ? "true" : "false" };
-            var tracked = Track(work, "ownerId", "targetDate", "blocked", "blocker", "checked");
+                ["ownerId"] = assignees.FirstOrDefault() ?? "", ["assigneeIds"] = JsonSerializer.Serialize(assignees),
+                ["targetDate"] = Text(work, "targetDate"), ["checklistDone"] = Ready(phase, work) ? "true" : "false" };
+            var tracked = Track(work, "ownerId", "assigneeIds", "deliverables", "deliverableTargetDates", "targetDate", "blocked", "blocker", "checked");
             if (note.ValueKind == JsonValueKind.String) tracked["notes"] = note;
             yield return new(new("sdlc-phase", $"{cycle}:{(release ? "release:" : "")}{phase.Key}", model), phase.Title,
                 $"{path} › {phase.Title}", ancestors, fields, tracked);
         }
     }
 
-    internal static IEnumerable<ConnectionEventDraft> Events(JsonElement previous, JsonElement next)
+    internal static IEnumerable<ConnectionEventDraft> Events(JsonElement previous, JsonElement next, bool newRoadmap)
     {
         var active = Text(next, "model");
         if (active.Length > 0 && active != Text(previous, "model"))
             yield return new(new("sdlc-model", active), "active-model-changed", new Dictionary<string, string> { ["model"] = active }, [Root]);
 
-        var before = Snapshots(previous).ToDictionary(item => item.Reference);
+        var before = Snapshots(newRoadmap ? default : previous).ToDictionary(item => item.Reference);
         foreach (var item in Snapshots(next))
         {
             var kind = item.Reference.Kind;
@@ -191,15 +219,25 @@ internal static partial class SdlcConnections
             "completed" => fields?.GetValueOrDefault("completed") == "true",
             "phase-status-is" => fields?.GetValueOrDefault("status") == condition.Arguments.GetValueOrDefault("status"),
             "phase-blocked" => fields?.GetValueOrDefault("blocked") == "true",
-            "phase-owner-is" => fields?.GetValueOrDefault("ownerId") == condition.Arguments.GetValueOrDefault("ownerId"),
+            "phase-owner-is" => fields?.GetValueOrDefault("assigneeIds") is { } assignees &&
+                JsonSerializer.Deserialize<string[]>(assignees)!.Contains(condition.Arguments.GetValueOrDefault("ownerId"), StringComparer.Ordinal),
             "phase-checklist-done" => fields?.GetValueOrDefault("checklistDone") == "true",
             _ => null
         };
     }
 
-    private static string[] Deliverables(Phase phase) => phase.Deliverables.Split(", ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-    private static bool Ready(Phase phase, JsonElement work) => phase.Ongoing || Deliverables(phase).All(item =>
-        ConnectionDocuments.Items(work, "checked").Any(value => value.GetString() == item));
+    private static string[] Assignees(JsonElement work) => Property(work, "assigneeIds").ValueKind == JsonValueKind.Array
+        ? TextItems(work, "assigneeIds") : Text(work, "ownerId") is { Length: > 0 } owner ? [owner] : [];
+    private static string[] Deliverables(Phase phase, JsonElement work) => Property(work, "deliverables").ValueKind == JsonValueKind.Array
+        ? TextItems(work, "deliverables") : phase.Deliverables.Split(", ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+    private static string[] TextItems(JsonElement work, string key) => ConnectionDocuments.Items(work, key).Select(item => item.GetString()!).ToArray();
+    private static string DeliverableName(Phase phase, JsonElement work, string item) =>
+        phase.Key == "analysis" && item == "Explored requirements" && Property(work, "deliverables").ValueKind != JsonValueKind.Array
+            ? "Refined requirements" : item;
+    private static HashSet<string> CheckedDeliverables(Phase phase, JsonElement work) =>
+        TextItems(work, "checked").Select(item => DeliverableName(phase, work, item)).ToHashSet(StringComparer.Ordinal);
+    private static bool Ready(Phase phase, JsonElement work) =>
+        phase.Ongoing || Deliverables(phase, work).All(CheckedDeliverables(phase, work).Contains);
     private static ConnectionEventDraft Event(ConnectionSnapshot node, string kind) => new(node.Reference, kind, node.Fields, node.Ancestors);
     private static JsonElement Property(JsonElement node, string key) => node.ValueKind == JsonValueKind.Object && node.TryGetProperty(key, out var value) ? value : default;
     private static bool Flag(JsonElement node, string key) => Property(node, key).ValueKind == JsonValueKind.True;

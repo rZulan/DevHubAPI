@@ -170,18 +170,34 @@ public static class ToolDocumentValidation
             var value = entry.Value;
             if (!phases.Contains(entry.Name) || !names.Add(entry.Name) || value.ValueKind != JsonValueKind.Object) return false;
             if (value.TryGetProperty("ownerId", out _) && !String(value, "ownerId", 100, true)) return false;
-            if (value.TryGetProperty("targetDate", out _) && (Text(value, "targetDate") is not {Length: 10} date
-                || !DateOnly.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed) || parsed.Year < 1900)) return false;
+            if (value.TryGetProperty("targetDate", out var targetDate) && !RoadmapDate(targetDate)) return false;
+            if (value.TryGetProperty("deliverableTargetDates", out var deadlines))
+            {
+                if (deadlines.ValueKind != JsonValueKind.Object) return false;
+                var deliverables = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var deadline in deadlines.EnumerateObject())
+                    if (deadline.Name.Length > 500 || string.IsNullOrWhiteSpace(deadline.Name) || !deliverables.Add(deadline.Name)
+                        || deliverables.Count > 50 || !RoadmapDate(deadline.Value)) return false;
+            }
             if (value.TryGetProperty("blocked", out _) && !Boolean(value, "blocked")) return false;
             if (value.TryGetProperty("blocker", out _) && !String(value, "blocker", 2000)) return false;
-            if (value.TryGetProperty("checked", out _))
-            {
-                if (!Array(value, "checked", 50, out var items)) return false;
-                var unique = new HashSet<string>();
-                foreach (var item in items.EnumerateArray()) if (item.ValueKind != JsonValueKind.String || item.GetString() is not {Length: > 0 and <= 500} label || string.IsNullOrWhiteSpace(label) || !unique.Add(label)) return false;
-            }
+            if (!RoadmapTextList(value, "checked", 50, 500) || !RoadmapTextList(value, "deliverables", 50, 500)
+                || !RoadmapTextList(value, "assigneeIds", 100, 100)) return false;
         }
         return true;
+    }
+
+    private static bool RoadmapDate(JsonElement value) => value.ValueKind == JsonValueKind.String && value.GetString() is { Length: 10 } date
+        && DateOnly.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out var parsed) && parsed.Year >= 1900;
+
+    private static bool RoadmapTextList(JsonElement work, string name, int maxCount, int maxLength)
+    {
+        if (!work.TryGetProperty(name, out _)) return true;
+        if (!Array(work, name, maxCount, out var items)) return false;
+        var unique = new HashSet<string>(StringComparer.Ordinal);
+        return items.EnumerateArray().All(item => item.ValueKind == JsonValueKind.String && item.GetString() is { } label
+            && label.Length <= maxLength && !string.IsNullOrWhiteSpace(label) && unique.Add(label));
     }
 
     private static bool RoadmapRelease(JsonElement release) => release.ValueKind == JsonValueKind.Object
@@ -218,7 +234,10 @@ public static class ToolDocumentValidation
     }
     private static bool Roadmap(JsonElement document)
     {
-        if (Text(document, "model") is not { } model || !RoadmapProgress(document, model)) return false;
+        if (Text(document, "model") is not { } model || !RoadmapProgress(document, model)
+            || document.TryGetProperty("creatorId", out _) && !Guid.TryParse(Text(document, "creatorId"), out _)
+            || document.TryGetProperty("roadmapId", out _) && !Guid.TryParse(Text(document, "roadmapId"), out _)
+            || document.TryGetProperty("connectToTodo", out _) && !Boolean(document, "connectToTodo")) return false;
         if (!document.TryGetProperty("modelStates", out var states)) return true;
         if (states.ValueKind != JsonValueKind.Object) return false;
         var names = new HashSet<string>();

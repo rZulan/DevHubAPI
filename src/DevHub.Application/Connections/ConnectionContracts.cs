@@ -61,6 +61,7 @@ public interface IConnectionTools
 public interface IProjectConnections
 {
     Task<Result<ConnectionAccessResponse>> Access(ConnectionScope scope, CancellationToken ct);
+    Task<Result<bool>> SetTodoCalendarEnabled(ConnectionScope scope, bool enabled, CancellationToken ct);
     Task<Result<IReadOnlyList<ConnectionCapability>>> Catalog(ConnectionScope scope, CancellationToken ct);
     Task<Result<IReadOnlyList<ConnectionNode>>> FindNodes(ConnectionScope scope, string? query, string? kind, string? id, string? parentId, int page, CancellationToken ct);
     Task<Result<IReadOnlyList<ConnectionResponse>>> List(ConnectionScope scope, CancellationToken ct);

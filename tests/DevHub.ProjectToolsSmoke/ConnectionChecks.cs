@@ -30,6 +30,18 @@ internal static class ConnectionChecks
         var todos = fixture.ServiceProvider.GetRequiredService<ITodoService>();
         var tools = fixture.ServiceProvider.GetRequiredService<IProjectToolsService>();
         var connections = fixture.ServiceProvider.GetRequiredService<IProjectConnections>();
+        Check(source.TodoCalendarEnabled && await ReadTodoCalendarEnabled(),
+            "The TODO Calendar connection defaults to enabled for migrated and new projects");
+        Require(await connections.SetTodoCalendarEnabled(scope, false, default));
+        Check(!await ReadTodoCalendarEnabled(), "Removing the default connection persists for this project");
+        Check((await connections.SetTodoCalendarEnabled(scope with { OrganizationId = Guid.NewGuid() }, true, default)).Error?.Type == ErrorType.NotFound &&
+            !await ReadTodoCalendarEnabled(), "The connection cannot be restored through another organization");
+        Require(await connections.SetTodoCalendarEnabled(scope, true, default));
+        Check(await ReadTodoCalendarEnabled(), "Restoring the default connection persists for this project");
+
+        Task<bool> ReadTodoCalendarEnabled() => db.Projects.Where(item => item.Id == project.Id)
+            .Select(item => item.TodoCalendarEnabled).SingleAsync();
+
         var board = Require(await todos.Create(scope.OrganizationId, scope.ProjectId, ownerId, new("Schema work", "", null), default));
         var task = Require(await todos.AddTask(scope.OrganizationId, scope.ProjectId, board.Id, ownerId,
             new("Create Users table", "", "progress"), default));

@@ -27,6 +27,7 @@ internal sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(project => project.Environments).HasMaxLength(1000).IsRequired();
         builder.Property(project => project.StartDate).HasColumnType("date");
         builder.Property(project => project.TargetDate).HasColumnType("date");
+        builder.Property(project => project.TodoCalendarEnabled).HasDefaultValue(true);
         builder.Property(project => project.CreatedAtUtc).IsRequired();
         builder.Property(project => project.UpdatedAtUtc);
 
